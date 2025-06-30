@@ -1,0 +1,175 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/user.schema.json",
+  "title": "User",
+  "description": "User entity schema for CortexWeaver project",
+  "type": "object",
+  "required": [
+    "id",
+    "email",
+    "firstName",
+    "lastName",
+    "createdAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the user",
+      "examples": ["123e4567-e89b-12d3-a456-426614174000"]
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "User's email address",
+      "maxLength": 255,
+      "examples": ["user@example.com"]
+    },
+    "firstName": {
+      "type": "string",
+      "description": "User's first name",
+      "minLength": 1,
+      "maxLength": 50,
+      "pattern": "^[a-zA-Z\\s'-]+$",
+      "examples": ["John"]
+    },
+    "lastName": {
+      "type": "string",
+      "description": "User's last name",
+      "minLength": 1,
+      "maxLength": 50,
+      "pattern": "^[a-zA-Z\\s'-]+$",
+      "examples": ["Doe"]
+    },
+    "passwordHash": {
+      "type": "string",
+      "description": "Hashed password (never exposed in API responses)",
+      "minLength": 60,
+      "maxLength": 255
+    },
+    "role": {
+      "type": "string",
+      "description": "User's role in the system",
+      "enum": ["admin", "user", "guest"],
+      "default": "user"
+    },
+    "isActive": {
+      "type": "boolean",
+      "description": "Whether the user account is active",
+      "default": true
+    },
+    "isEmailVerified": {
+      "type": "boolean",
+      "description": "Whether the user's email has been verified",
+      "default": false
+    },
+    "profile": {
+      "type": "object",
+      "description": "Additional user profile information",
+      "properties": {
+        "avatar": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to user's avatar image"
+        },
+        "bio": {
+          "type": "string",
+          "description": "User's biography",
+          "maxLength": 500
+        },
+        "location": {
+          "type": "string",
+          "description": "User's location",
+          "maxLength": 100
+        },
+        "website": {
+          "type": "string",
+          "format": "uri",
+          "description": "User's website URL"
+        }
+      },
+      "additionalProperties": false
+    },
+    "preferences": {
+      "type": "object",
+      "description": "User preferences and settings",
+      "properties": {
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark", "auto"],
+          "default": "auto"
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+          "default": "en",
+          "examples": ["en", "en-US", "fr", "es"]
+        },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "boolean",
+              "default": true
+            },
+            "push": {
+              "type": "boolean",
+              "default": false
+            },
+            "sms": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "lastLoginAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of user's last login"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the user was created"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the user was last updated"
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "email": "john.doe@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "role": "user",
+      "isActive": true,
+      "isEmailVerified": true,
+      "profile": {
+        "avatar": "https://example.com/avatars/john-doe.jpg",
+        "bio": "Software developer passionate about AI and automation",
+        "location": "San Francisco, CA",
+        "website": "https://johndoe.dev"
+      },
+      "preferences": {
+        "theme": "dark",
+        "language": "en-US",
+        "notifications": {
+          "email": true,
+          "push": true,
+          "sms": false
+        }
+      },
+      "lastLoginAt": "2023-12-07T10:30:00Z",
+      "createdAt": "2023-12-01T09:00:00Z",
+      "updatedAt": "2023-12-07T10:30:00Z"
+    }
+  ]
+}

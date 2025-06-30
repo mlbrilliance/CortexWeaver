@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/user-registration.schema.json",
+  "title": "User Registration Input",
+  "description": "Schema for validating user registration input data",
+  "type": "object",
+  "required": [
+    "email",
+    "password",
+    "firstName",
+    "lastName"
+  ],
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "User's email address",
+      "maxLength": 255,
+      "examples": ["user@example.com"]
+    },
+    "password": {
+      "type": "string",
+      "description": "User's password",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$",
+      "examples": ["SecurePass123!"]
+    },
+    "confirmPassword": {
+      "type": "string",
+      "description": "Password confirmation (must match password)",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "firstName": {
+      "type": "string",
+      "description": "User's first name",
+      "minLength": 1,
+      "maxLength": 50,
+      "pattern": "^[a-zA-Z\\s'-]+$",
+      "examples": ["John"]
+    },
+    "lastName": {
+      "type": "string",
+      "description": "User's last name",
+      "minLength": 1,
+      "maxLength": 50,
+      "pattern": "^[a-zA-Z\\s'-]+$",
+      "examples": ["Doe"]
+    },
+    "acceptTerms": {
+      "type": "boolean",
+      "description": "Whether user accepts terms of service",
+      "const": true
+    },
+    "marketingConsent": {
+      "type": "boolean",
+      "description": "Whether user consents to marketing communications",
+      "default": false
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "confirmPassword": {
+            "type": "string"
+          }
+        },
+        "required": ["confirmPassword"]
+      },
+      "then": {
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "confirmPassword": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "errorMessage": "Password and confirm password must match"
+      }
+    }
+  ],
+  "examples": [
+    {
+      "email": "jane.smith@example.com",
+      "password": "SecurePassword123!",
+      "confirmPassword": "SecurePassword123!",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "acceptTerms": true,
+      "marketingConsent": false
+    }
+  ],
+  "errorMessage": {
+    "required": {
+      "email": "Email address is required",
+      "password": "Password is required",
+      "firstName": "First name is required",
+      "lastName": "Last name is required"
+    },
+    "properties": {
+      "email": "Please provide a valid email address",
+      "password": "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character",
+      "firstName": "First name must contain only letters, spaces, hyphens, and apostrophes",
+      "lastName": "Last name must contain only letters, spaces, hyphens, and apostrophes",
+      "acceptTerms": "You must accept the terms of service to register"
+    }
+  }
+}

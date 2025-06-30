@@ -1,0 +1,65 @@
+{
+  "name": "cortexweaver",
+  "version": "1.0.0",
+  "description": "CortexWeaver is a command-line interface (CLI) tool that orchestrates a swarm of specialized AI agents, powered by Claude Code and Gemini CLI, to assist in software development. It transforms a high-level project plan (plan.md) into a series of coordinated, parallelized tasks executed by agents with distinct roles.",
+  "main": "dist/index.js",
+  "bin": {
+    "cortex-weaver": "dist/index.js"
+  },
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "build": "npm run clean && tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "echo 'Using existing dist build for publishing'",
+    "dev": "ts-node src/index.ts",
+    "prepublish": "npm run build",
+    "publish:dry": "npm publish --dry-run"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "cli",
+    "development",
+    "orchestration",
+    "claude",
+    "gemini",
+    "automation",
+    "software-development",
+    "task-management",
+    "parallelization",
+    "swarm-intelligence"
+  ],
+  "author": "CortexWeaver Team",
+  "license": "MIT",
+  "homepage": "https://github.com/cortexweaver/cortexweaver#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cortexweaver/cortexweaver.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cortexweaver/cortexweaver/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.7",
+    "jest": "^30.0.3",
+    "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.0",
+    "@google/generative-ai": "^0.24.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/yargs": "^17.0.33",
+    "dotenv": "^17.0.0",
+    "js-yaml": "^4.1.0",
+    "neo4j-driver": "^5.28.1",
+    "yargs": "^18.0.0"
+  }
+}

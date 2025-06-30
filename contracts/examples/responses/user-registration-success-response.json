@@ -1,0 +1,181 @@
+{
+  "description": "Example successful user registration response",
+  "examples": [
+    {
+      "name": "Standard successful registration",
+      "description": "Response for a successful user registration",
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": "application/json",
+        "Location": "/api/v1/users/123e4567-e89b-12d3-a456-426614174000"
+      },
+      "body": {
+        "id": "123e4567-e89b-12d3-a456-426614174000",
+        "email": "john.doe@example.com",
+        "firstName": "John",
+        "lastName": "Doe",
+        "role": "user",
+        "isActive": true,
+        "isEmailVerified": false,
+        "profile": {
+          "avatar": null,
+          "bio": null,
+          "location": null,
+          "website": null
+        },
+        "preferences": {
+          "theme": "auto",
+          "language": "en",
+          "notifications": {
+            "email": true,
+            "push": false,
+            "sms": false
+          }
+        },
+        "createdAt": "2023-12-07T10:00:00.000Z",
+        "updatedAt": "2023-12-07T10:00:00.000Z"
+      }
+    },
+    {
+      "name": "Registration with marketing consent",
+      "description": "Response when user has opted into marketing communications",
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": "application/json",
+        "Location": "/api/v1/users/456e7890-e12b-34d5-a678-901234567890"
+      },
+      "body": {
+        "id": "456e7890-e12b-34d5-a678-901234567890",
+        "email": "jane.smith@example.com",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "role": "user",
+        "isActive": true,
+        "isEmailVerified": false,
+        "profile": {
+          "avatar": null,
+          "bio": null,
+          "location": null,
+          "website": null
+        },
+        "preferences": {
+          "theme": "auto",
+          "language": "en",
+          "notifications": {
+            "email": true,
+            "push": false,
+            "sms": false
+          }
+        },
+        "marketingConsent": true,
+        "createdAt": "2023-12-07T10:15:00.000Z",
+        "updatedAt": "2023-12-07T10:15:00.000Z"
+      }
+    },
+    {
+      "name": "International user registration",
+      "description": "Response for user with international characters",
+      "statusCode": 201,
+      "headers": {
+        "Content-Type": "application/json",
+        "Location": "/api/v1/users/789e0123-e45b-67d8-a901-234567890123"
+      },
+      "body": {
+        "id": "789e0123-e45b-67d8-a901-234567890123",
+        "email": "françois.müller@example.com",
+        "firstName": "François",
+        "lastName": "Müller",
+        "role": "user",
+        "isActive": true,
+        "isEmailVerified": false,
+        "profile": {
+          "avatar": null,
+          "bio": null,
+          "location": null,
+          "website": null
+        },
+        "preferences": {
+          "theme": "auto",
+          "language": "en",
+          "notifications": {
+            "email": true,
+            "push": false,
+            "sms": false
+          }
+        },
+        "createdAt": "2023-12-07T10:30:00.000Z",
+        "updatedAt": "2023-12-07T10:30:00.000Z"
+      }
+    }
+  ],
+  "responseProperties": {
+    "requiredFields": [
+      "id",
+      "email", 
+      "firstName",
+      "lastName",
+      "role",
+      "isActive",
+      "isEmailVerified",
+      "createdAt",
+      "updatedAt"
+    ],
+    "optionalFields": [
+      "profile",
+      "preferences",
+      "marketingConsent",
+      "lastLoginAt"
+    ],
+    "fieldConstraints": {
+      "id": "Must be a valid UUID v4",
+      "email": "Must be a valid email address (normalized to lowercase)",
+      "firstName": "Must be 1-50 characters, letters/spaces/hyphens/apostrophes only",
+      "lastName": "Must be 1-50 characters, letters/spaces/hyphens/apostrophes only",
+      "role": "Must be one of: admin, user, guest (default: user)",
+      "isActive": "Must be boolean (default: true)",
+      "isEmailVerified": "Must be boolean (default: false)",
+      "createdAt": "Must be valid ISO 8601 timestamp",
+      "updatedAt": "Must be valid ISO 8601 timestamp, equal to createdAt on registration"
+    },
+    "sensitiveFieldsExcluded": [
+      "password",
+      "passwordHash",
+      "verificationToken",
+      "resetToken"
+    ]
+  },
+  "headerProperties": {
+    "required": [
+      "Content-Type: application/json"
+    ],
+    "optional": [
+      "Location: /api/v1/users/{userId}"
+    ]
+  },
+  "validationRules": {
+    "idGeneration": "ID must be unique and follow UUID v4 format",
+    "emailNormalization": "Email should be normalized to lowercase",
+    "timestampAccuracy": "createdAt and updatedAt should be within 1 second of request time",
+    "defaultValues": "All default values should be applied correctly",
+    "dataIntegrity": "Response should match the data that was submitted (excluding password)"
+  },
+  "testingNotes": {
+    "propertyBasedTests": [
+      "For any valid registration request, response should contain all required fields",
+      "Response ID should always be unique across all users",
+      "Email in response should be normalized version of input email",
+      "Timestamps should be realistic and in proper format"
+    ],
+    "invariantTests": [
+      "Password/passwordHash should never appear in response",
+      "createdAt should equal updatedAt for new registrations",
+      "isEmailVerified should be false for new registrations",
+      "User role should default to 'user' if not specified"
+    ],
+    "boundaryTests": [
+      "Response structure should be consistent regardless of input length",
+      "International characters should be properly encoded in response",
+      "Optional fields should be included with null/default values"
+    ]
+  }
+}

@@ -1,0 +1,218 @@
+{
+  "description": "Example user registration request data",
+  "examples": [
+    {
+      "name": "Valid user registration",
+      "description": "A complete and valid user registration request",
+      "data": {
+        "email": "john.doe@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 201,
+      "expectedResponse": "user-registration-success-response.json"
+    },
+    {
+      "name": "Registration with marketing consent",
+      "description": "User registration with marketing consent enabled",
+      "data": {
+        "email": "jane.smith@example.com",
+        "password": "MySecurePass456@",
+        "confirmPassword": "MySecurePass456@",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "acceptTerms": true,
+        "marketingConsent": true
+      },
+      "expectedStatus": 201,
+      "expectedResponse": "user-registration-success-response.json"
+    },
+    {
+      "name": "Invalid email format",
+      "description": "Registration attempt with invalid email format",
+      "data": {
+        "email": "invalid-email",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 400,
+      "expectedResponse": "validation-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "email",
+          "code": "INVALID_FORMAT",
+          "message": "Please provide a valid email address"
+        }
+      ]
+    },
+    {
+      "name": "Weak password",
+      "description": "Registration attempt with password that doesn't meet requirements",
+      "data": {
+        "email": "user@example.com",
+        "password": "weak",
+        "confirmPassword": "weak",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 400,
+      "expectedResponse": "validation-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "password",
+          "code": "WEAK_PASSWORD",
+          "message": "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character"
+        }
+      ]
+    },
+    {
+      "name": "Password mismatch",
+      "description": "Registration attempt with password and confirmPassword not matching",
+      "data": {
+        "email": "user@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "DifferentPassword456@",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 400,
+      "expectedResponse": "validation-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "confirmPassword",
+          "code": "PASSWORD_MISMATCH",
+          "message": "Password and confirm password must match"
+        }
+      ]
+    },
+    {
+      "name": "Missing required fields",
+      "description": "Registration attempt with missing required fields",
+      "data": {
+        "email": "user@example.com",
+        "password": "SecurePassword123!",
+        "acceptTerms": true
+      },
+      "expectedStatus": 400,
+      "expectedResponse": "validation-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "firstName",
+          "code": "REQUIRED",
+          "message": "First name is required"
+        },
+        {
+          "field": "lastName",
+          "code": "REQUIRED",
+          "message": "Last name is required"
+        }
+      ]
+    },
+    {
+      "name": "Terms not accepted",
+      "description": "Registration attempt without accepting terms of service",
+      "data": {
+        "email": "user@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": false,
+        "marketingConsent": false
+      },
+      "expectedStatus": 400,
+      "expectedResponse": "validation-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "acceptTerms",
+          "code": "TERMS_NOT_ACCEPTED",
+          "message": "You must accept the terms of service to register"
+        }
+      ]
+    },
+    {
+      "name": "Email already exists",
+      "description": "Registration attempt with email that already exists",
+      "data": {
+        "email": "existing-user@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "John",
+        "lastName": "Doe",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 409,
+      "expectedResponse": "conflict-error-response.json",
+      "expectedErrors": [
+        {
+          "field": "email",
+          "code": "EMAIL_EXISTS",
+          "message": "A user with this email address already exists"
+        }
+      ]
+    },
+    {
+      "name": "International characters",
+      "description": "Registration with international characters in name",
+      "data": {
+        "email": "françois.müller@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "François",
+        "lastName": "Müller",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 201,
+      "expectedResponse": "user-registration-success-response.json"
+    },
+    {
+      "name": "Edge case - long names",
+      "description": "Registration with maximum length names",
+      "data": {
+        "email": "user@example.com",
+        "password": "SecurePassword123!",
+        "confirmPassword": "SecurePassword123!",
+        "firstName": "VeryLongFirstNameThatIsNearTheMaximumAllowedLength",
+        "lastName": "VeryLongLastNameThatIsAlsoNearTheMaximumAllowed",
+        "acceptTerms": true,
+        "marketingConsent": false
+      },
+      "expectedStatus": 201,
+      "expectedResponse": "user-registration-success-response.json"
+    }
+  ],
+  "testingNotes": {
+    "propertyBasedTests": [
+      "Generate random valid user data and verify all registrations succeed",
+      "Generate random invalid emails and verify all registrations fail with appropriate errors",
+      "Generate random weak passwords and verify all registrations fail with password errors",
+      "Test email case insensitivity (USER@EXAMPLE.COM should conflict with user@example.com)"
+    ],
+    "boundaryTests": [
+      "Test minimum/maximum length names",
+      "Test minimum/maximum length passwords",
+      "Test maximum length email addresses",
+      "Test special characters in names and emails"
+    ],
+    "securityTests": [
+      "Verify password hashing is applied",
+      "Verify sensitive data is not logged",
+      "Test rate limiting on registration attempts",
+      "Test input sanitization for XSS prevention"
+    ]
+  }
+}

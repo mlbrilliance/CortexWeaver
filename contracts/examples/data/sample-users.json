@@ -1,0 +1,262 @@
+{
+  "description": "Sample user data for testing and development",
+  "users": [
+    {
+      "id": "123e4567-e89b-12d3-a456-426614174000",
+      "email": "admin@example.com",
+      "firstName": "System",
+      "lastName": "Administrator",
+      "role": "admin",
+      "isActive": true,
+      "isEmailVerified": true,
+      "profile": {
+        "avatar": "https://example.com/avatars/admin.jpg",
+        "bio": "System administrator with full access privileges",
+        "location": "Server Room",
+        "website": "https://example.com"
+      },
+      "preferences": {
+        "theme": "dark",
+        "language": "en-US",
+        "notifications": {
+          "email": true,
+          "push": true,
+          "sms": false
+        }
+      },
+      "lastLoginAt": "2023-12-07T09:00:00.000Z",
+      "createdAt": "2023-01-01T00:00:00.000Z",
+      "updatedAt": "2023-12-07T09:00:00.000Z"
+    },
+    {
+      "id": "456e7890-e12b-34d5-a678-901234567890",
+      "email": "john.doe@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "role": "user",
+      "isActive": true,
+      "isEmailVerified": true,
+      "profile": {
+        "avatar": "https://example.com/avatars/john-doe.jpg",
+        "bio": "Software developer passionate about AI and automation",
+        "location": "San Francisco, CA",
+        "website": "https://johndoe.dev"
+      },
+      "preferences": {
+        "theme": "light",
+        "language": "en-US",
+        "notifications": {
+          "email": true,
+          "push": false,
+          "sms": false
+        }
+      },
+      "lastLoginAt": "2023-12-06T14:30:00.000Z",
+      "createdAt": "2023-03-15T08:00:00.000Z",
+      "updatedAt": "2023-12-06T14:30:00.000Z"
+    },
+    {
+      "id": "789e0123-e45b-67d8-a901-234567890123",
+      "email": "jane.smith@example.com",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "role": "user",
+      "isActive": true,
+      "isEmailVerified": false,
+      "profile": {
+        "avatar": null,
+        "bio": "Product manager with a focus on user experience",
+        "location": "New York, NY",
+        "website": null
+      },
+      "preferences": {
+        "theme": "auto",
+        "language": "en-US",
+        "notifications": {
+          "email": true,
+          "push": true,
+          "sms": true
+        }
+      },
+      "lastLoginAt": "2023-12-05T16:45:00.000Z",
+      "createdAt": "2023-06-10T12:00:00.000Z",
+      "updatedAt": "2023-12-05T16:45:00.000Z"
+    },
+    {
+      "id": "012e3456-e78b-90d1-a234-567890123456",
+      "email": "françois.müller@example.com",
+      "firstName": "François",
+      "lastName": "Müller",
+      "role": "user",
+      "isActive": true,
+      "isEmailVerified": true,
+      "profile": {
+        "avatar": "https://example.com/avatars/francois.jpg",
+        "bio": "International consultant specializing in multilingual applications",
+        "location": "Paris, France",
+        "website": "https://mueller-consulting.fr"
+      },
+      "preferences": {
+        "theme": "dark",
+        "language": "fr-FR",
+        "notifications": {
+          "email": true,
+          "push": false,
+          "sms": false
+        }
+      },
+      "lastLoginAt": "2023-12-04T10:15:00.000Z",
+      "createdAt": "2023-09-20T11:30:00.000Z",
+      "updatedAt": "2023-12-04T10:15:00.000Z"
+    },
+    {
+      "id": "345e6789-e01b-23d4-a567-890123456789",
+      "email": "inactive.user@example.com",
+      "firstName": "Inactive",
+      "lastName": "User",
+      "role": "user",
+      "isActive": false,
+      "isEmailVerified": true,
+      "profile": {
+        "avatar": null,
+        "bio": "This account has been deactivated",
+        "location": null,
+        "website": null
+      },
+      "preferences": {
+        "theme": "light",
+        "language": "en-US",
+        "notifications": {
+          "email": false,
+          "push": false,
+          "sms": false
+        }
+      },
+      "lastLoginAt": "2023-10-15T08:00:00.000Z",
+      "createdAt": "2023-08-01T14:00:00.000Z",
+      "updatedAt": "2023-11-01T09:00:00.000Z"
+    },
+    {
+      "id": "678e9012-e34b-56d7-a890-123456789012",
+      "email": "guest@example.com",
+      "firstName": "Guest",
+      "lastName": "Account",
+      "role": "guest",
+      "isActive": true,
+      "isEmailVerified": false,
+      "profile": {
+        "avatar": null,
+        "bio": null,
+        "location": null,
+        "website": null
+      },
+      "preferences": {
+        "theme": "auto",
+        "language": "en",
+        "notifications": {
+          "email": false,
+          "push": false,
+          "sms": false
+        }
+      },
+      "lastLoginAt": null,
+      "createdAt": "2023-12-07T12:00:00.000Z",
+      "updatedAt": "2023-12-07T12:00:00.000Z"
+    }
+  ],
+  "testingScenarios": [
+    {
+      "name": "Admin User Tests",
+      "description": "Tests using the admin user account",
+      "userId": "123e4567-e89b-12d3-a456-426614174000",
+      "scenarios": [
+        "Test admin-only endpoints access",
+        "Test user management operations",
+        "Test system configuration access"
+      ]
+    },
+    {
+      "name": "Regular User Tests",
+      "description": "Tests using regular user accounts",
+      "userIds": [
+        "456e7890-e12b-34d5-a678-901234567890",
+        "789e0123-e45b-67d8-a901-234567890123"
+      ],
+      "scenarios": [
+        "Test profile management",
+        "Test preference updates",
+        "Test normal user operations"
+      ]
+    },
+    {
+      "name": "Inactive User Tests",
+      "description": "Tests with inactive user account",
+      "userId": "345e6789-e01b-23d4-a567-890123456789",
+      "scenarios": [
+        "Test login rejection for inactive users",
+        "Test account reactivation flow",
+        "Test inactive user restrictions"
+      ]
+    },
+    {
+      "name": "Email Verification Tests",
+      "description": "Tests for email verification status",
+      "unverifiedUsers": [
+        "789e0123-e45b-67d8-a901-234567890123",
+        "678e9012-e34b-56d7-a890-123456789012"
+      ],
+      "verifiedUsers": [
+        "123e4567-e89b-12d3-a456-426614174000",
+        "456e7890-e12b-34d5-a678-901234567890"
+      ],
+      "scenarios": [
+        "Test email verification flow",
+        "Test access restrictions for unverified users",
+        "Test verification token generation and validation"
+      ]
+    },
+    {
+      "name": "Internationalization Tests",
+      "description": "Tests with international user data",
+      "userId": "012e3456-e78b-90d1-a234-567890123456",
+      "scenarios": [
+        "Test Unicode character handling",
+        "Test localized responses",
+        "Test timezone handling"
+      ]
+    },
+    {
+      "name": "Role-based Access Tests",
+      "description": "Tests for different user roles",
+      "roles": {
+        "admin": ["123e4567-e89b-12d3-a456-426614174000"],
+        "user": [
+          "456e7890-e12b-34d5-a678-901234567890",
+          "789e0123-e45b-67d8-a901-234567890123",
+          "012e3456-e78b-90d1-a234-567890123456"
+        ],
+        "guest": ["678e9012-e34b-56d7-a890-123456789012"]
+      },
+      "scenarios": [
+        "Test role-based endpoint access",
+        "Test permission enforcement",
+        "Test role elevation prevention"
+      ]
+    }
+  ],
+  "dataGenerationRules": {
+    "userIds": "Must be valid UUID v4 format",
+    "emails": "Must be unique and valid email format",
+    "passwords": "Stored as hashed values only, never in plain text",
+    "timestamps": "Must be valid ISO 8601 format",
+    "names": "Support international characters and reasonable length limits",
+    "roles": "Must be one of: admin, user, guest",
+    "booleanFlags": "Must be explicitly true or false, not null"
+  },
+  "usageNotes": {
+    "development": "Use this data to seed development databases",
+    "testing": "Reference these users in integration tests",
+    "propertyTesting": "Use as basis for generating similar test data",
+    "apiTesting": "Use these user IDs in API endpoint tests"
+  }
+}
