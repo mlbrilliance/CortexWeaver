@@ -3,7 +3,7 @@
 <div align="center">
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/cortexweaver/cortexweaver)
-[![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](https://www.npmjs.com/package/cortex-weaver)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue?style=flat-square)](https://www.npmjs.com/package/cortexweaver)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen?style=flat-square)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
@@ -43,15 +43,15 @@
 ## 🎥 See CortexWeaver in Action
 
 ```bash
-# Initialize a new AI-powered project in seconds
-$ cortex-weaver init my-awesome-app
+# Initialize a new AI-powered project in seconds (no installation needed!)
+$ npx cortexweaver init my-awesome-app
 ✨ Creating project structure with 20+ AI agents ready to assist...
 📁 Setting up modular architecture...
 🤖 Configuring specialized agents...
 ✅ Project ready! Your AI development team is standing by.
 
 # Start building with AI assistance
-$ cortex-weaver start
+$ npx cortexweaver start
 🧠 CortexWeaver Orchestrator starting...
 🏗️  Architect Agent: Analyzing requirements...
 💻 Coder Agent: Ready for implementation...
@@ -64,22 +64,55 @@ $ cortex-weaver start
 
 ## 🚀 Quick Start
 
-### ⚡ 60-Second Setup
+Choose your preferred installation method:
+
+### ⚡ **Option 1: NPX (Instant - No Installation)**
 
 ```bash
-# 1. Clone and install (30 seconds)
-git clone https://github.com/cortexweaver/cortexweaver.git
-cd cortexweaver && npm install && npm run build
+# 1. Create your first AI-powered project (15 seconds)
+mkdir my-project && cd my-project
+npx cortexweaver init
+
+# 2. Configure authentication (15 seconds)
+npx cortexweaver auth configure
+
+# 3. Start your AI development team! 🚀
+npx cortexweaver start
+```
+
+### 📦 **Option 2: Global Installation**
+
+```bash
+# 1. Install globally (30 seconds)
+npm install -g cortexweaver
 
 # 2. Create your first AI-powered project (15 seconds)
 mkdir my-project && cd my-project
-../cortexweaver/dist/index.js init
+cortex-weaver init
 
 # 3. Configure authentication (15 seconds)
-../cortexweaver/dist/index.js auth configure
+cortex-weaver auth configure
 
 # 4. Start your AI development team! 🚀
-../cortexweaver/dist/index.js start
+cortex-weaver start
+```
+
+### 🔧 **Option 3: Development Setup**
+
+```bash
+# 1. Clone and install (60 seconds)
+git clone https://github.com/mlbrilliance/CortexWeaver.git
+cd CortexWeaver && npm install && npm run build
+
+# 2. Create your first AI-powered project (15 seconds)
+mkdir my-project && cd my-project
+../CortexWeaver/dist/index.js init
+
+# 3. Configure authentication (15 seconds)
+../CortexWeaver/dist/index.js auth configure
+
+# 4. Start your AI development team! 🚀
+../CortexWeaver/dist/index.js start
 ```
 
 ### 📋 Prerequisites
@@ -91,7 +124,7 @@ mkdir my-project && cd my-project
 | 🗄️ **Neo4j** | Latest | Knowledge graph (optional) |
 | 🔑 **Claude API** | - | AI agent intelligence |
 
-💡 **Pro Tip:** Use `cortex-weaver doctor` to check all prerequisites automatically!
+💡 **Pro Tip:** Use `npx cortexweaver doctor` or `cortex-weaver doctor` to check all prerequisites automatically!
 
 ---
 
@@ -203,6 +236,20 @@ graph TB
 
 ### 🎮 Example 1: Building a REST API
 
+#### Using NPX (Recommended)
+```bash
+# 1. Initialize project (no installation needed)
+npx cortexweaver init my-api
+cd my-api
+
+# 2. Define your vision in plan.md
+echo "Build a user management REST API with authentication" > plan.md
+
+# 3. Let the AI team work!
+npx cortexweaver start
+```
+
+#### Using Global Installation
 ```bash
 # 1. Initialize project
 cortex-weaver init my-api
@@ -226,22 +273,28 @@ cortex-weaver start
 ### 🌐 Example 2: Frontend Application
 
 ```bash
-# 1. Create React app with AI assistance
+# Using NPX
+npx cortexweaver init my-frontend
+echo "React dashboard with real-time charts and user management" > plan.md
+npx cortexweaver start --workflow=frontend --agents=architect,coder,london-tester
+
+# Using Global Installation
 cortex-weaver init my-frontend
 echo "React dashboard with real-time charts and user management" > plan.md
-
-# 2. Start development with specialized configuration
 cortex-weaver start --workflow=frontend --agents=architect,coder,london-tester
 ```
 
 ### 🔧 Example 3: Microservices Architecture
 
 ```bash
-# 1. Initialize microservices project
+# Using NPX
+npx cortexweaver init microservices-app
+echo "E-commerce platform with user, product, and order services" > plan.md
+npx cortexweaver start --parallel=5 --agents=all
+
+# Using Global Installation
 cortex-weaver init microservices-app
 echo "E-commerce platform with user, product, and order services" > plan.md
-
-# 2. Deploy full agent team
 cortex-weaver start --parallel=5 --agents=all
 ```
 
@@ -252,6 +305,23 @@ cortex-weaver start --parallel=5 --agents=all
 ### 🎮 Available Commands
 
 #### 🚀 **Project Management**
+
+**Using NPX (No Installation Required):**
+```bash
+# Initialize new project
+npx cortexweaver init [path]
+
+# Check project health
+npx cortexweaver status [path]
+
+# Start AI orchestration
+npx cortexweaver start [path]
+
+# Monitor progress
+npx cortexweaver logs <task-id>
+```
+
+**Using Global Installation:**
 ```bash
 # Initialize new project
 cortex-weaver init [path]
@@ -267,6 +337,23 @@ cortex-weaver logs <task-id>
 ```
 
 #### 🔧 **Advanced Operations**
+
+**Using NPX:**
+```bash
+# Authentication management
+npx cortexweaver auth status
+npx cortexweaver auth configure
+
+# Agent management  
+npx cortexweaver list-agents
+npx cortexweaver retry <task-id>
+
+# Project operations
+npx cortexweaver merge <task-id>
+npx cortexweaver attach <task-id>
+```
+
+**Using Global Installation:**
 ```bash
 # Authentication management
 cortex-weaver auth status
@@ -283,14 +370,15 @@ cortex-weaver attach <task-id>
 
 ### 🎯 Basic Development Workflow
 
+#### NPX Workflow (Recommended)
 ```bash
 # 1. Project Setup
 mkdir awesome-project && cd awesome-project
-cortex-weaver init
+npx cortexweaver init
 
 # 2. Authentication
-cortex-weaver auth status
-# If needed: cortex-weaver auth configure
+npx cortexweaver auth status
+# If needed: npx cortexweaver auth configure
 
 # 3. Define Requirements
 cat > plan.md << EOF
@@ -315,9 +403,49 @@ Build a task management API with the following features:
 EOF
 
 # 4. Start Development
-cortex-weaver start
+npx cortexweaver start
 
 # 5. Monitor Progress
+npx cortexweaver status
+npx cortexweaver logs task-001
+```
+
+#### Global Installation Workflow
+```bash
+# 1. Install globally
+npm install -g cortexweaver
+
+# 2. Project Setup
+mkdir awesome-project && cd awesome-project
+cortex-weaver init
+
+# 3. Authentication
+cortex-weaver auth status
+# If needed: cortex-weaver auth configure
+
+# 4. Define Requirements (same as above)
+cat > plan.md << EOF
+# My Awesome Project
+## Goal
+Build a task management API with the following features:
+## Requirements
+- User authentication and authorization
+- CRUD operations for tasks
+- Real-time notifications
+- Database persistence
+- API documentation
+## Acceptance Criteria
+- RESTful API design
+- Input validation
+- Error handling
+- Comprehensive tests
+- Docker deployment
+EOF
+
+# 5. Start Development
+cortex-weaver start
+
+# 6. Monitor Progress
 cortex-weaver status
 cortex-weaver logs task-001
 ```
@@ -529,16 +657,35 @@ Built with ❤️ by [Nick Sudh](https://nicksudh.com) and the CortexWeaver comm
 
 ### 🚀 **Ready to Transform Your Development Process?**
 
+#### ⚡ **Instant Start with NPX (Recommended)**
 ```bash
-git clone https://github.com/cortexweaver/cortexweaver.git
-cd cortexweaver && npm install && npm run build
+# No installation needed - get started in seconds!
+npx cortexweaver init my-ai-project
+cd my-ai-project
+npx cortexweaver start
+```
+
+#### 📦 **Install from NPM**
+```bash
+# Global installation
+npm install -g cortexweaver
+cortex-weaver init my-ai-project
+cd my-ai-project
+cortex-weaver start
+```
+
+#### 🔧 **Development Setup**
+```bash
+# From source
+git clone https://github.com/mlbrilliance/CortexWeaver.git
+cd CortexWeaver && npm install && npm run build
 mkdir my-ai-project && cd my-ai-project
-../cortexweaver/dist/index.js init
+../CortexWeaver/dist/index.js init
 ```
 
 **Start building with 20+ AI agents today!** 🤖✨
 
-[⭐ Star this project](https://github.com/cortexweaver/cortexweaver) • [🔗 Share with friends](https://twitter.com/intent/tweet?text=Check%20out%20CortexWeaver%20-%20AI%20agent%20orchestration%20for%20developers!&url=https://github.com/cortexweaver/cortexweaver) • [📖 Read the docs](docs/)
+[![NPM Package](https://img.shields.io/badge/📦-NPM%20Package-red?style=for-the-badge)](https://www.npmjs.com/package/cortexweaver) • [⭐ Star this project](https://github.com/mlbrilliance/CortexWeaver) • [🔗 Share with friends](https://twitter.com/intent/tweet?text=Check%20out%20CortexWeaver%20-%20AI%20agent%20orchestration%20for%20developers!&url=https://www.npmjs.com/package/cortexweaver) • [📖 Read the docs](docs/)
 
 </div>
 
