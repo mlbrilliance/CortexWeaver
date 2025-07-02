@@ -214,7 +214,7 @@ export class AnalyticsOperations extends CognitiveCanvasBase {
       tasks: tasks?.records?.map((r: any) => r.get('t').properties) || [],
       agents: agents?.records?.map((r: any) => r.get('a').properties) || [],
       pheromones: pheromones?.records?.map((r: any) => r.get('ph').properties) || [],
-      decisions: decisions?.records?.map((r: any) => r.get('ad').properties) || [],
+      architecturalDecisions: decisions?.records?.map((r: any) => r.get('ad').properties) || [],
       contracts: contracts?.records?.map((r: any) => r.get('c').properties) || [],
       codeModules: codeModules?.records?.map((r: any) => r.get('cm').properties) || [],
       tests: tests?.records?.map((r: any) => r.get('t').properties) || []

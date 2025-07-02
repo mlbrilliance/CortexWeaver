@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ConfigService } from '../config';
 import { Orchestrator, OrchestratorConfig } from '../orchestrator';
+import { ClaudeClientConfig } from '../claude-client';
 import { SessionManager } from '../session';
 import { WorkspaceManager } from '../workspace';
 import { AuthManager } from '../auth-manager';
@@ -203,14 +204,12 @@ ${contractsStatus}
     // Override process.env with loaded variables for validation
     Object.assign(process.env, envVars);
 
-    // 3. Get API key from authentication
-    let claudeApiKey: string;
+    // 3. Get authentication credentials (API key or session token)
+    const claudeConfig: Partial<ClaudeClientConfig> = {};
     if (claudeCredentials?.apiKey) {
-      claudeApiKey = claudeCredentials.apiKey;
+      claudeConfig.apiKey = claudeCredentials.apiKey;
     } else if (claudeCredentials?.sessionToken) {
-      // For Claude Code session authentication, we'll use a placeholder
-      // The actual Claude SDK will handle session tokens internally
-      claudeApiKey = 'claude-session-auth';
+      claudeConfig.sessionToken = claudeCredentials.sessionToken;
     } else {
       throw new Error('No valid Claude credentials found');
     }
@@ -229,7 +228,7 @@ ${contractsStatus}
           password: neo4jPassword
         },
         claude: {
-          apiKey: claudeApiKey,
+          ...claudeConfig,
           defaultModel: projectConfig.models.claude as any,
           budgetLimit: projectConfig.budget.maxCost
         }

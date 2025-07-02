@@ -101,6 +101,7 @@ export class ConfigService {
   /**
    * Get Claude API key with AuthManager integration
    * Checks AuthManager first, then falls back to environment variables
+   * @deprecated Use getClaudeCredentials() instead for session token support
    */
   async getClaudeApiKey(): Promise<string> {
     try {
@@ -118,6 +119,36 @@ export class ConfigService {
 
     // Fallback to environment variables
     return this.getRequiredEnvVar('CLAUDE_API_KEY');
+  }
+
+  /**
+   * Get Claude credentials (API key or session token) with AuthManager integration
+   * Checks AuthManager first, then falls back to environment variables
+   */
+  async getClaudeCredentials(): Promise<{ apiKey?: string; sessionToken?: string }> {
+    try {
+      const authManager = new AuthManager(this.projectRoot);
+      await authManager.discoverAuthentication();
+      
+      const credentials = await authManager.getClaudeCredentials();
+      if (credentials?.apiKey || credentials?.sessionToken) {
+        return {
+          apiKey: credentials.apiKey,
+          sessionToken: credentials.sessionToken
+        };
+      }
+    } catch (error) {
+      // Fall back to environment variables if AuthManager fails
+      console.warn('AuthManager failed, falling back to environment variables:', (error as Error).message);
+    }
+
+    // Fallback to environment variables
+    const apiKey = process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY;
+    if (apiKey) {
+      return { apiKey };
+    }
+
+    throw new Error('No Claude authentication found. Set CLAUDE_API_KEY/ANTHROPIC_API_KEY environment variable or configure Claude Code CLI.');
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Driver, Session } from 'neo4j-driver';
+import { Driver, Transaction, ManagedTransaction } from 'neo4j-driver';
 import { 
   ProjectData, 
   TaskData, 
@@ -12,27 +12,73 @@ import {
   DiagnosticData,
   PatternData,
   PrototypeData
-} from './types';
+} from './types.js';
+import { TransactionManager } from './transaction/transaction-manager.js';
+import { TransactionOptions, BatchOperation } from './transaction/types.js';
 
 export class CoreOperations {
-  constructor(private driver: Driver) {}
+  private transactionManager: TransactionManager;
 
-  private async executeQuery<T>(query: string, params: any = {}, returnKey?: string): Promise<T | null> {
-    const session = this.driver.session();
-    try {
-      const result = await session.run(query, params);
-      if (!returnKey) return result as T;
-      if (result.records.length === 0) return null;
-      return result.records[0].get(returnKey).properties;
-    } finally {
-      await session.close();
-    }
+  constructor(private driver: Driver) {
+    this.transactionManager = new TransactionManager(driver);
+  }
+
+  private async executeQuery<T>(
+    query: string, 
+    params: any = {}, 
+    returnKey?: string,
+    options?: TransactionOptions
+  ): Promise<T | null> {
+    const result = await this.transactionManager.executeInTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(query, params);
+        if (!returnKey) return queryResult as T;
+        if (queryResult.records.length === 0) return null;
+        return queryResult.records[0].get(returnKey).properties;
+      },
+      options
+    );
+    return result.data;
+  }
+
+  private async executeReadQuery<T>(
+    query: string, 
+    params: any = {}, 
+    returnKey?: string
+  ): Promise<T | null> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(query, params);
+        if (!returnKey) return queryResult as T;
+        if (queryResult.records.length === 0) return null;
+        return queryResult.records[0].get(returnKey).properties;
+      }
+    );
+    return result.data;
+  }
+
+  private async executeWriteQuery<T>(
+    query: string, 
+    params: any = {}, 
+    returnKey?: string,
+    options?: TransactionOptions
+  ): Promise<T | null> {
+    const result = await this.transactionManager.executeInWriteTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(query, params);
+        if (!returnKey) return queryResult as T;
+        if (queryResult.records.length === 0) return null;
+        return queryResult.records[0].get(returnKey).properties;
+      },
+      options
+    );
+    return result.data;
   }
 
   // Project Operations
   async createProject(projectData: ProjectData): Promise<ProjectData> {
     this.validateProjectData(projectData);
-    const result = await this.executeQuery<ProjectData>(
+    const result = await this.executeWriteQuery<ProjectData>(
       'CREATE (p:Project {id: $id, name: $name, description: $description, status: $status, createdAt: $createdAt}) RETURN p',
       projectData, 'p'
     );
@@ -43,11 +89,11 @@ export class CoreOperations {
   }
 
   async getProject(id: string): Promise<ProjectData | null> {
-    return this.executeQuery('MATCH (p:Project {id: $id}) RETURN p', { id }, 'p');
+    return this.executeReadQuery('MATCH (p:Project {id: $id}) RETURN p', { id }, 'p');
   }
 
   async updateProjectStatus(id: string, status: string): Promise<ProjectData> {
-    const result = await this.executeQuery<ProjectData>(
+    const result = await this.executeWriteQuery<ProjectData>(
       'MATCH (p:Project {id: $id}) SET p.status = $status, p.updatedAt = $updatedAt RETURN p',
       { id, status, updatedAt: new Date().toISOString() }, 'p'
     );
@@ -57,10 +103,10 @@ export class CoreOperations {
     return result;
   }
 
-  // Task Operations
+  // Task Operations with Transaction Safety
   async createTask(taskData: TaskData): Promise<TaskData> {
     this.validateTaskData(taskData);
-    const result = await this.executeQuery<TaskData>(
+    const result = await this.executeWriteQuery<TaskData>(
       'CREATE (t:Task {id: $id, title: $title, description: $description, status: $status, priority: $priority, projectId: $projectId, createdAt: $createdAt}) RETURN t',
       taskData, 't'
     );
@@ -71,7 +117,7 @@ export class CoreOperations {
   }
 
   async updateTaskStatus(taskId: string, status: string): Promise<TaskData> {
-    const result = await this.executeQuery<TaskData>(
+    const result = await this.executeWriteQuery<TaskData>(
       'MATCH (t:Task {id: $id}) SET t.status = $status, t.updatedAt = $updatedAt RETURN t',
       { 
         id: taskId, 
@@ -89,16 +135,29 @@ export class CoreOperations {
   }
 
   async createTaskDependency(fromTaskId: string, toTaskId: string): Promise<void> {
-    await this.executeQuery(
+    await this.executeWriteQuery(
       'MATCH (t1:Task {id: $fromTaskId}), (t2:Task {id: $toTaskId}) CREATE (t1)-[r:DEPENDS_ON]->(t2) RETURN r',
       { fromTaskId, toTaskId }
     );
   }
 
+  // Batch task creation for improved performance
+  async createTasksBatch(tasksData: TaskData[]): Promise<TaskData[]> {
+    const operations: BatchOperation[] = tasksData.map(taskData => ({
+      query: 'CREATE (t:Task {id: $id, title: $title, description: $description, status: $status, priority: $priority, projectId: $projectId, createdAt: $createdAt}) RETURN t',
+      params: taskData,
+      operation: 'WRITE' as const,
+      priority: 'HIGH' as const
+    }));
+
+    const result = await this.transactionManager.executeBatch(operations);
+    return result.data.map((records: any) => records[0]?.get('t')?.properties).filter(Boolean);
+  }
+
   // Agent Operations
   async createAgent(agentData: AgentData): Promise<AgentData> {
     this.validateAgentData(agentData);
-    const result = await this.executeQuery<AgentData>(
+    const result = await this.executeWriteQuery<AgentData>(
       'CREATE (a:Agent {id: $id, name: $name, role: $role, capabilities: $capabilities, status: $status, createdAt: $createdAt}) RETURN a',
       agentData, 'a'
     );
@@ -109,16 +168,33 @@ export class CoreOperations {
   }
 
   async assignAgentToTask(agentId: string, taskId: string): Promise<void> {
-    await this.executeQuery(
-      'MATCH (a:Agent {id: $agentId}), (t:Task {id: $taskId}) CREATE (t)-[r:ASSIGNED_TO {assignedAt: $assignedAt}]->(a) RETURN r',
-      { agentId, taskId, assignedAt: new Date().toISOString() }
-    );
+    // Use transaction to ensure both agent and task exist
+    await this.transactionManager.executeInWriteTransaction(async (tx: ManagedTransaction) => {
+      // Verify both entities exist
+      const agentCheck = await tx.run('MATCH (a:Agent {id: $agentId}) RETURN a', { agentId });
+      const taskCheck = await tx.run('MATCH (t:Task {id: $taskId}) RETURN t', { taskId });
+      
+      if (agentCheck.records.length === 0) {
+        throw new Error(`Agent with id ${agentId} not found`);
+      }
+      if (taskCheck.records.length === 0) {
+        throw new Error(`Task with id ${taskId} not found`);
+      }
+      
+      // Create assignment relationship
+      await tx.run(
+        'MATCH (a:Agent {id: $agentId}), (t:Task {id: $taskId}) CREATE (t)-[r:ASSIGNED_TO {assignedAt: $assignedAt}]->(a) RETURN r',
+        { agentId, taskId, assignedAt: new Date().toISOString() }
+      );
+      
+      return true;
+    });
   }
 
   // Architectural Decisions
   async storeArchitecturalDecision(decisionData: ArchitecturalDecisionData): Promise<ArchitecturalDecisionData> {
     this.validateArchitecturalDecisionData(decisionData);
-    const result = await this.executeQuery<ArchitecturalDecisionData>(
+    const result = await this.executeWriteQuery<ArchitecturalDecisionData>(
       'CREATE (ad:ArchitecturalDecision {id: $id, title: $title, description: $description, rationale: $rationale, status: $status, projectId: $projectId, createdAt: $createdAt}) RETURN ad',
       decisionData, 'ad'
     );
@@ -128,10 +204,10 @@ export class CoreOperations {
     return result;
   }
 
-  // Contract Management
+  // Contract Management with Transaction Safety
   async createContract(contractData: ContractData): Promise<ContractData> {
     this.validateContractData(contractData);
-    const result = await this.executeQuery<ContractData>(
+    const result = await this.executeWriteQuery<ContractData>(
       'CREATE (c:Contract {id: $id, name: $name, type: $type, version: $version, specification: $specification, description: $description, projectId: $projectId, createdAt: $createdAt}) RETURN c',
       contractData, 'c'
     );
@@ -142,12 +218,12 @@ export class CoreOperations {
   }
 
   async getContract(id: string): Promise<ContractData | null> {
-    return this.executeQuery('MATCH (c:Contract {id: $id}) RETURN c', { id }, 'c');
+    return this.executeReadQuery('MATCH (c:Contract {id: $id}) RETURN c', { id }, 'c');
   }
 
   async updateContract(id: string, updates: Partial<ContractData>): Promise<ContractData> {
     const updateData = { ...updates, id, updatedAt: new Date().toISOString() };
-    const result = await this.executeQuery<ContractData>(
+    const result = await this.executeWriteQuery<ContractData>(
       'MATCH (c:Contract {id: $id}) SET c += $updates RETURN c',
       { id, updates: updateData }, 'c'
     );
@@ -160,7 +236,7 @@ export class CoreOperations {
   // Code Module Management
   async createCodeModule(moduleData: CodeModuleData): Promise<CodeModuleData> {
     this.validateCodeModuleData(moduleData);
-    const result = await this.executeQuery<CodeModuleData>(
+    const result = await this.executeWriteQuery<CodeModuleData>(
       'CREATE (cm:CodeModule {id: $id, name: $name, filePath: $filePath, type: $type, language: $language, projectId: $projectId, createdAt: $createdAt}) RETURN cm',
       moduleData, 'cm'
     );
@@ -171,12 +247,12 @@ export class CoreOperations {
   }
 
   async getCodeModule(id: string): Promise<CodeModuleData | null> {
-    return this.executeQuery('MATCH (cm:CodeModule {id: $id}) RETURN cm', { id }, 'cm');
+    return this.executeReadQuery('MATCH (cm:CodeModule {id: $id}) RETURN cm', { id }, 'cm');
   }
 
   async updateCodeModule(id: string, updates: Partial<CodeModuleData>): Promise<CodeModuleData> {
     const updateData = { ...updates, id, updatedAt: new Date().toISOString() };
-    const result = await this.executeQuery<CodeModuleData>(
+    const result = await this.executeWriteQuery<CodeModuleData>(
       'MATCH (cm:CodeModule {id: $id}) SET cm += $updates RETURN cm',
       { id, updates: updateData }, 'cm'
     );
@@ -189,7 +265,7 @@ export class CoreOperations {
   // Test Management
   async createTest(testData: TestData): Promise<TestData> {
     this.validateTestData(testData);
-    const result = await this.executeQuery<TestData>(
+    const result = await this.executeWriteQuery<TestData>(
       'CREATE (t:Test {id: $id, name: $name, filePath: $filePath, type: $type, framework: $framework, projectId: $projectId, createdAt: $createdAt}) RETURN t',
       testData, 't'
     );
@@ -200,12 +276,12 @@ export class CoreOperations {
   }
 
   async getTest(id: string): Promise<TestData | null> {
-    return this.executeQuery('MATCH (t:Test {id: $id}) RETURN t', { id }, 't');
+    return this.executeReadQuery('MATCH (t:Test {id: $id}) RETURN t', { id }, 't');
   }
 
   async updateTest(id: string, updates: Partial<TestData>): Promise<TestData> {
     const updateData = { ...updates, id, updatedAt: new Date().toISOString() };
-    const result = await this.executeQuery<TestData>(
+    const result = await this.executeWriteQuery<TestData>(
       'MATCH (t:Test {id: $id}) SET t += $updates RETURN t',
       { id, updates: updateData }, 't'
     );
@@ -215,7 +291,7 @@ export class CoreOperations {
     return result;
   }
 
-  // Prototype Management
+  // Prototype Management with improved transaction safety
   async createPrototypeNode(prototypeData: {
     contractId: string;
     pseudocode: string;
@@ -225,35 +301,61 @@ export class CoreOperations {
     const id = `prototype-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const createdAt = new Date().toISOString();
     
-    const result = await this.executeQuery<PrototypeData>(
-      'CREATE (p:Prototype {id: $id, contractId: $contractId, pseudocode: $pseudocode, flowDiagram: $flowDiagram, outputPath: $outputPath, createdAt: $createdAt}) RETURN p',
-      {
-        id,
-        contractId: prototypeData.contractId,
-        pseudocode: prototypeData.pseudocode,
-        flowDiagram: prototypeData.flowDiagram,
-        outputPath: prototypeData.outputPath,
-        createdAt
-      },
-      'p'
-    );
+    const result = await this.transactionManager.executeInWriteTransaction(async (tx: ManagedTransaction) => {
+      // Verify contract exists
+      const contractCheck = await tx.run('MATCH (c:Contract {id: $contractId}) RETURN c', { contractId: prototypeData.contractId });
+      if (contractCheck.records.length === 0) {
+        throw new Error(`Contract with id ${prototypeData.contractId} not found`);
+      }
+      
+      // Create prototype node
+      const result = await tx.run(
+        'CREATE (p:Prototype {id: $id, contractId: $contractId, pseudocode: $pseudocode, flowDiagram: $flowDiagram, outputPath: $outputPath, createdAt: $createdAt}) RETURN p',
+        {
+          id,
+          contractId: prototypeData.contractId,
+          pseudocode: prototypeData.pseudocode,
+          flowDiagram: prototypeData.flowDiagram,
+          outputPath: prototypeData.outputPath,
+          createdAt
+        }
+      );
+      
+      if (result.records.length === 0) {
+        throw new Error('Failed to create prototype node');
+      }
+      
+      return id;
+    });
     
-    if (!result) {
-      throw new Error('Failed to create prototype node');
-    }
-    
-    return id;
+    return result.data;
   }
 
   async linkPrototypeToContract(prototypeId: string, contractId: string): Promise<void> {
-    await this.executeQuery(
-      'MATCH (p:Prototype {id: $prototypeId}), (c:Contract {id: $contractId}) CREATE (p)-[r:PROTOTYPES {linkedAt: $linkedAt}]->(c) RETURN r',
-      { 
-        prototypeId, 
-        contractId, 
-        linkedAt: new Date().toISOString() 
+    await this.transactionManager.executeInWriteTransaction(async (tx: ManagedTransaction) => {
+      // Verify both entities exist
+      const prototypeCheck = await tx.run('MATCH (p:Prototype {id: $prototypeId}) RETURN p', { prototypeId });
+      const contractCheck = await tx.run('MATCH (c:Contract {id: $contractId}) RETURN c', { contractId });
+      
+      if (prototypeCheck.records.length === 0) {
+        throw new Error(`Prototype with id ${prototypeId} not found`);
       }
-    );
+      if (contractCheck.records.length === 0) {
+        throw new Error(`Contract with id ${contractId} not found`);
+      }
+      
+      // Create link
+      await tx.run(
+        'MATCH (p:Prototype {id: $prototypeId}), (c:Contract {id: $contractId}) CREATE (p)-[r:PROTOTYPES {linkedAt: $linkedAt}]->(c) RETURN r',
+        { 
+          prototypeId, 
+          contractId, 
+          linkedAt: new Date().toISOString() 
+        }
+      );
+      
+      return true;
+    });
   }
 
   // Validation methods
@@ -301,5 +403,25 @@ export class CoreOperations {
     if (!validTypes.includes(data.type)) {
       throw new Error(`Invalid test type: ${data.type}. Must be one of: ${validTypes.join(', ')}`);
     }
+  }
+
+  // Transaction Manager access for advanced operations
+  getTransactionManager(): TransactionManager {
+    return this.transactionManager;
+  }
+
+  // Health check method
+  async healthCheck(): Promise<boolean> {
+    return this.transactionManager.healthCheck();
+  }
+
+  // Metrics access
+  getMetrics() {
+    return this.transactionManager.getDetailedMetrics();
+  }
+
+  // Cleanup method
+  async close(): Promise<void> {
+    await this.transactionManager.close();
   }
 }

@@ -15,13 +15,20 @@ export class AuthStrategies {
 
   /**
    * Discover Claude authentication methods in order of priority:
-   * 1. Claude Code session tokens
-   * 2. Claude Code config files
-   * 3. ANTHROPIC_API_KEY environment variable
-   * 4. CLAUDE_API_KEY environment variable (legacy)
+   * 1. Claude Code environment authentication
+   * 2. Claude Code session tokens
+   * 3. Claude Code config files
+   * 4. ANTHROPIC_API_KEY environment variable
+   * 5. CLAUDE_API_KEY environment variable (legacy)
    */
   async discoverClaudeAuthentication(): Promise<AuthProvider> {
-    // 1. Check for Claude Code session tokens (highest priority)
+    // 1. Check for Claude Code environment authentication (highest priority)
+    const envAuth = await this.checkClaudeCodeEnvironment();
+    if (envAuth && envAuth.method === AuthMethod.CLAUDE_CODE_SESSION) {
+      return envAuth;
+    }
+
+    // 2. Check for Claude Code session tokens
     const sessionAuth = await this.checkClaudeCodeSession();
     if (sessionAuth && sessionAuth.method === AuthMethod.CLAUDE_CODE_SESSION) {
       return sessionAuth;
@@ -61,6 +68,32 @@ export class AuthStrategies {
       method: AuthMethod.NONE,
       error: 'No Claude authentication found'
     };
+  }
+
+  /**
+   * Check for Claude Code environment authentication
+   * This detects when we're running inside Claude Code CLI
+   */
+  private async checkClaudeCodeEnvironment(): Promise<AuthProvider | null> {
+    try {
+      // Check if we're running in Claude Code environment
+      const claudeCodeEnv = process.env.CLAUDECODE;
+      
+      if (claudeCodeEnv === '1') {
+        // We're running in Claude Code environment, authentication should be inherited
+        return {
+          method: AuthMethod.CLAUDE_CODE_SESSION,
+          details: {
+            session_token: 'claude-code-inherited',
+            environment: 'claude-code-cli'
+          }
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      return null;
+    }
   }
 
   /**

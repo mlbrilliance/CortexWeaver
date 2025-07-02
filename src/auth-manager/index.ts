@@ -25,6 +25,7 @@ export interface AuthProvider {
     refresh_token?: string;
     client_id?: string;
     client_secret?: string;
+    environment?: string;
   };
   error?: string;
 }

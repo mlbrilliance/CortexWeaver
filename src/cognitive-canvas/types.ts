@@ -155,7 +155,7 @@ export interface KnowledgeGraph {
   tasks: any[];
   agents: any[];
   pheromones: any[];
-  decisions: any[];
+  architecturalDecisions: any[];
   contracts: any[];
   codeModules: any[];
   tests: any[];

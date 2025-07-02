@@ -231,8 +231,10 @@ export class CognitiveCanvas {
   }
 
   async initializeSchema(): Promise<void> {
-    const session = this.driver.session();
-    try {
+    // Use transaction manager for proper constraint creation
+    const transactionManager = this.coreOps.getTransactionManager();
+    
+    await transactionManager.executeInWriteTransaction(async (tx) => {
       const constraints = [
         'CREATE CONSTRAINT project_id IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE',
         'CREATE CONSTRAINT task_id IF NOT EXISTS FOR (t:Task) REQUIRE t.id IS UNIQUE',
@@ -244,10 +246,21 @@ export class CognitiveCanvas {
         'CREATE CONSTRAINT code_module_id IF NOT EXISTS FOR (cm:CodeModule) REQUIRE cm.id IS UNIQUE',
         'CREATE CONSTRAINT test_id IF NOT EXISTS FOR (t:Test) REQUIRE t.id IS UNIQUE'
       ];
-      await Promise.all(constraints.map(constraint => session.run(constraint)));
-    } finally {
-      await session.close();
-    }
+      
+      // Execute constraints sequentially to avoid conflicts
+      for (const constraint of constraints) {
+        try {
+          await tx.run(constraint);
+        } catch (error) {
+          // Log but don't fail if constraint already exists
+          if (!(error instanceof Error) || !error.message.includes('already exists')) {
+            throw error;
+          }
+        }
+      }
+      
+      return true;
+    });
   }
 
 
