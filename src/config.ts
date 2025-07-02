@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import { AuthManager } from './auth-manager';
 
 export interface ProjectConfig {
   models: {
@@ -95,5 +96,77 @@ export class ConfigService {
 
   getCortexWeaverDir(): string {
     return path.join(this.projectRoot, '.cortexweaver');
+  }
+
+  /**
+   * Get Claude API key with AuthManager integration
+   * Checks AuthManager first, then falls back to environment variables
+   */
+  async getClaudeApiKey(): Promise<string> {
+    try {
+      const authManager = new AuthManager(this.projectRoot);
+      await authManager.discoverAuthentication();
+      
+      const credentials = await authManager.getClaudeCredentials();
+      if (credentials?.apiKey) {
+        return credentials.apiKey;
+      }
+    } catch (error) {
+      // Fall back to environment variables if AuthManager fails
+      console.warn('AuthManager failed, falling back to environment variables:', (error as Error).message);
+    }
+
+    // Fallback to environment variables
+    return this.getRequiredEnvVar('CLAUDE_API_KEY');
+  }
+
+  /**
+   * Get Gemini API key with AuthManager integration
+   * Checks AuthManager first, then falls back to environment variables
+   */
+  async getGeminiApiKey(): Promise<string> {
+    try {
+      const authManager = new AuthManager(this.projectRoot);
+      await authManager.discoverAuthentication();
+      
+      const credentials = await authManager.getGeminiCredentials();
+      if (credentials?.apiKey) {
+        return credentials.apiKey;
+      }
+    } catch (error) {
+      // Fall back to environment variables if AuthManager fails
+      console.warn('AuthManager failed, falling back to environment variables:', (error as Error).message);
+    }
+
+    // Fallback to environment variables
+    return this.getRequiredEnvVar('GEMINI_API_KEY');
+  }
+
+  /**
+   * Check if authentication is properly configured
+   */
+  async checkAuthenticationStatus(): Promise<{
+    claude: boolean;
+    gemini: boolean;
+    recommendations: string[];
+  }> {
+    try {
+      const authManager = new AuthManager(this.projectRoot);
+      await authManager.discoverAuthentication();
+      
+      const status = await authManager.getAuthStatus();
+      
+      return {
+        claude: status.claudeAuth.isAuthenticated,
+        gemini: status.geminiAuth.isAuthenticated,
+        recommendations: status.recommendations
+      };
+    } catch (error) {
+      return {
+        claude: false,
+        gemini: false,
+        recommendations: [`Failed to check authentication: ${(error as Error).message}`]
+      };
+    }
   }
 }

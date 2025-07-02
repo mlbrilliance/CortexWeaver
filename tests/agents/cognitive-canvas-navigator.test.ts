@@ -1,532 +1,679 @@
-import { CognitiveCanvasNavigatorAgent } from '../../src/agents/cognitive-canvas-navigator';
-import { ClaudeClient, ClaudeModel } from '../../src/claude-client';
-import { WorkspaceManager } from '../../src/workspace';
-import { CognitiveCanvas } from '../../src/cognitive-canvas';
-import { SessionManager } from '../../src/session';
+import { CognitiveCanvasNavigator, NavigationQuery, NavigationResult } from '../../src/agents/cognitive-canvas-navigator';
+import { AgentConfig, TaskContext, TaskData } from '../../src/agent';
+import { ClaudeModel } from '../../src/claude-client';
+import { setupMocks, createMockAgentConfig, createMockTask, createMockContext, suppressConsoleWarnings } from '../test-utils';
 
-// Mock dependencies
-jest.mock('../../src/claude-client');
-jest.mock('../../src/workspace');
-jest.mock('../../src/cognitive-canvas');
-jest.mock('../../src/session');
-jest.mock('fs');
+describe('CognitiveCanvasNavigator', () => {
+  let navigator: CognitiveCanvasNavigator;
+  let mockConfig: AgentConfig;
+  let mockTask: TaskData;
+  let mockContext: TaskContext;
 
-describe('CognitiveCanvasNavigatorAgent', () => {
-  let navigator: CognitiveCanvasNavigatorAgent;
-  let mockClaudeClient: jest.Mocked<ClaudeClient>;
-  let mockWorkspace: jest.Mocked<WorkspaceManager>;
-  let mockCognitiveCanvas: jest.Mocked<CognitiveCanvas>;
-  let mockSessionManager: jest.Mocked<SessionManager>;
-
-  const mockConfig = {
-    id: 'navigator-1',
-    role: 'cognitive-canvas-navigator',
-    capabilities: ['knowledge-graph-management', 'data-analysis', 'relationship-mapping', 'neo4j-operations'],
-    claudeConfig: {
-      apiKey: 'test-api-key',
-      defaultModel: ClaudeModel.SONNET,
-      maxTokens: 4000,
-      temperature: 0.2
-    },
-    workspaceRoot: '/test/workspace',
-    cognitiveCanvasConfig: {
-      uri: 'bolt://localhost:7687',
-      username: 'neo4j',
-      password: 'test'
-    }
-  };
-
-  const mockTask = {
-    id: 'task-1',
-    title: 'Analyze Knowledge Graph',
-    description: 'Perform comprehensive analysis of the knowledge graph and optimize relationships',
-    projectId: 'project-1',
-    status: 'assigned',
-    priority: 'medium',
-    dependencies: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  const mockContext = {
-    projectInfo: {
-      name: 'Test Project',
-      language: 'typescript',
-      framework: 'node'
-    },
-    graphQuery: {
-      operation: 'analyze',
-      filters: {
-        nodeTypes: ['Task', 'Agent', 'Project'],
-        timeRange: '30d'
-      }
-    },
-    analysisType: 'full-graph-analysis'
-  };
+  setupMocks();
+  suppressConsoleWarnings();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockConfig = createMockAgentConfig(
+      'navigator-1',
+      'cognitive-canvas-navigator',
+      ['graph-navigation', 'knowledge-discovery', 'semantic-search']
+    );
 
-    // Mock Claude client
-    mockClaudeClient = {
-      sendMessage: jest.fn().mockResolvedValue({
-        content: 'Knowledge graph analysis completed',
-        tokenUsage: { inputTokens: 300, outputTokens: 200, totalTokens: 500 },
-        model: 'claude-3-sonnet-20240229'
-      }),
-      getConfiguration: jest.fn(),
-      updateConfiguration: jest.fn(),
-      sendMessageStream: jest.fn(),
-      getTokenUsage: jest.fn(),
-      resetTokenUsage: jest.fn(),
-      setDefaultModel: jest.fn(),
-      getAvailableModels: jest.fn()
-    } as any;
+    mockTask = createMockTask(
+      'nav-task-1',
+      'Navigate project knowledge graph',
+      'Find patterns and connections in the project knowledge base'
+    );
+    (mockTask as any).metadata = {
+      queryType: 'semantic',
+      searchTerms: 'user authentication patterns'
+    };
 
-    (ClaudeClient as jest.MockedClass<typeof ClaudeClient>).mockImplementation(() => mockClaudeClient);
+    mockContext = createMockContext({
+      query: {
+        type: 'semantic',
+        query: 'user authentication patterns',
+        context: { domain: 'security' }
+      }
+    });
 
-    // Mock workspace
-    mockWorkspace = {
-      executeCommand: jest.fn().mockResolvedValue({
-        stdout: 'Command executed successfully',
-        stderr: '',
-        exitCode: 0
-      }),
-      getWorktreePath: jest.fn().mockReturnValue('/test/workspace/task-1'),
-      getProjectRoot: jest.fn().mockReturnValue('/test/workspace'),
-      createWorktree: jest.fn(),
-      removeWorktree: jest.fn(),
-      listWorktrees: jest.fn(),
-      commitChanges: jest.fn(),
-      mergeToBranch: jest.fn(),
-      getWorktreeStatus: jest.fn()
-    } as any;
-
-    (WorkspaceManager as jest.MockedClass<typeof WorkspaceManager>).mockImplementation(() => mockWorkspace);
-
-    // Mock cognitive canvas
-    mockCognitiveCanvas = {
-      createPheromone: jest.fn().mockResolvedValue({
-        id: 'pheromone-1',
-        type: 'knowledge_graph',
-        strength: 0.8,
-        context: 'graph_analysis_completed',
-        metadata: {},
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 3600000).toISOString()
-      }),
-      executeQuery: jest.fn().mockResolvedValue([
-        { nodeType: 'Task', count: 150 },
-        { nodeType: 'Agent', count: 25 },
-        { nodeType: 'Project', count: 10 }
-      ]),
-      getGraphStatistics: jest.fn().mockResolvedValue({
-        totalNodes: 185,
-        totalRelationships: 450,
-        nodeTypes: ['Task', 'Agent', 'Project', 'Pheromone'],
-        relationshipTypes: ['ASSIGNED_TO', 'DEPENDS_ON', 'CREATES', 'OPTIMIZES']
-      }),
-      findPaths: jest.fn().mockResolvedValue([]),
-      optimizeGraph: jest.fn().mockResolvedValue(true),
-      createGraphBackup: jest.fn().mockResolvedValue('backup-123'),
-      restoreGraphBackup: jest.fn().mockResolvedValue(true),
-      validateGraphIntegrity: jest.fn().mockResolvedValue({ isValid: true, issues: [] })
-    } as any;
-
-    (CognitiveCanvas as jest.MockedClass<typeof CognitiveCanvas>).mockImplementation(() => mockCognitiveCanvas);
-
-    // Mock session manager
-    mockSessionManager = {} as any;
-    (SessionManager as jest.MockedClass<typeof SessionManager>).mockImplementation(() => mockSessionManager);
-
-    navigator = new CognitiveCanvasNavigatorAgent();
+    navigator = new CognitiveCanvasNavigator();
   });
 
   describe('initialization', () => {
+    it('should initialize with correct capabilities', () => {
+      expect(navigator.getCapabilities()).toEqual([]);
+      expect(navigator.getRole()).toBe('');
+      expect(navigator.getStatus()).toBe('uninitialized');
+    });
+
     it('should initialize successfully with valid config', async () => {
       await navigator.initialize(mockConfig);
-      expect(navigator.getStatus()).toBe('initialized');
+      
       expect(navigator.getId()).toBe('navigator-1');
       expect(navigator.getRole()).toBe('cognitive-canvas-navigator');
+      expect(navigator.getStatus()).toBe('initialized');
+      expect(navigator.getCapabilities()).toEqual([
+        'graph-navigation',
+        'knowledge-discovery',
+        'semantic-search'
+      ]);
     });
 
-    it('should validate required capabilities', async () => {
-      const invalidConfig = {
-        ...mockConfig,
-        capabilities: ['wrong-capability']
-      };
-      
-      await expect(navigator.initialize(invalidConfig)).rejects.toThrow('Cognitive Canvas Navigator agent requires knowledge-graph-management capability');
-    });
+    it('should require graph-navigation capability', async () => {
+      const invalidConfig = createMockAgentConfig(
+        'navigator-1',
+        'cognitive-canvas-navigator',
+        ['other-capability']
+      );
 
-    it('should validate exclusive access to Neo4j', async () => {
-      const sharedConfig = {
-        ...mockConfig,
-        capabilities: [...mockConfig.capabilities, 'shared-neo4j-access']
-      };
-      
-      await expect(navigator.initialize(sharedConfig)).rejects.toThrow('Cognitive Canvas Navigator must be the sole manager of the Neo4j knowledge graph');
-    });
-  });
-
-  describe('executeTask', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should execute knowledge graph analysis task successfully', async () => {
-      const result = await navigator.executeTask();
-
-      expect(result).toEqual({
-        graphAnalysis: expect.any(String),
-        nodeStatistics: expect.any(Object),
-        relationshipAnalysis: expect.any(Object),
-        pathAnalysis: expect.any(Array),
-        optimizations: expect.any(Array),
-        healthCheck: expect.any(Object),
-        recommendations: expect.any(Array),
-        metadata: expect.objectContaining({
-          totalNodes: expect.any(Number),
-          totalRelationships: expect.any(Number),
-          analysisDepth: expect.any(String),
-          generatedAt: expect.any(String)
-        })
-      });
-    });
-
-    it('should throw error if no task is assigned', async () => {
-      const emptyNavigator = new CognitiveCanvasNavigatorAgent();
-      await emptyNavigator.initialize(mockConfig);
-      
-      await expect(emptyNavigator.executeTask()).rejects.toThrow('No task or context available');
-    });
-
-    it('should perform comprehensive graph analysis', async () => {
-      mockClaudeClient.sendMessage.mockResolvedValue({
-        content: `# Knowledge Graph Analysis
-
-## Graph Statistics
-- Total Nodes: 185
-- Total Relationships: 450
-- Node Types: Task (150), Agent (25), Project (10)
-- Relationship Types: ASSIGNED_TO, DEPENDS_ON, CREATES
-
-## Node Analysis
-### Task Nodes
-- High activity: 85% of nodes have recent updates
-- Completion rate: 78%
-- Average dependencies: 3.2
-
-## Relationship Patterns
-- Strong clustering around project nodes
-- Task-agent assignments well distributed
-- Some orphaned nodes detected
-
-## Optimizations
-1. **Orphaned Node Cleanup** - Remove 12 disconnected nodes
-2. **Index Optimization** - Add indexes on frequently queried properties
-3. **Relationship Pruning** - Remove 23 stale relationships
-
-## Recommendations
-- Implement regular graph maintenance schedule
-- Add monitoring for graph performance metrics`,
-        tokenUsage: { inputTokens: 400, outputTokens: 300, totalTokens: 700 },
-        model: 'claude-3-sonnet-20240229'
-      });
-
-      const result = await navigator.executeTask();
-
-      expect(result.nodeStatistics.totalNodes).toBe(185);
-      expect(result.relationshipAnalysis.totalRelationships).toBe(450);
-      expect(result.optimizations).toHaveLength(3);
-      expect(result.recommendations).toContain('Implement regular graph maintenance schedule');
-    });
-
-    it('should create graph analysis files', async () => {
-      const writeFileSpy = jest.spyOn(navigator as any, 'writeFile').mockResolvedValue(undefined);
-      
-      await navigator.executeTask();
-
-      expect(writeFileSpy).toHaveBeenCalledWith(
-        'GRAPH_ANALYSIS.md',
-        expect.stringContaining('Knowledge Graph Analysis Report')
+      await expect(navigator.initialize(invalidConfig)).rejects.toThrow(
+        'Cognitive Canvas Navigator requires graph-navigation capability'
       );
     });
-
-    it('should report progress during execution', async () => {
-      const reportProgressSpy = jest.spyOn(navigator as any, 'reportProgress');
-      
-      await navigator.executeTask();
-
-      expect(reportProgressSpy).toHaveBeenCalledWith('started', 'Beginning knowledge graph analysis');
-      expect(reportProgressSpy).toHaveBeenCalledWith('completed', 'Knowledge graph analysis completed');
-    });
-
-    it('should validate graph query requirements', async () => {
-      const contextWithoutQuery = { ...mockContext };
-      delete contextWithoutQuery.graphQuery;
-      
-      await navigator.receiveTask(mockTask, contextWithoutQuery);
-      
-      // Should still work with default query
-      const result = await navigator.executeTask();
-      expect(result).toBeDefined();
-    });
   });
 
-  describe('getPromptTemplate', () => {
-    it('should return comprehensive prompt template', () => {
-      const template = navigator.getPromptTemplate();
-      
-      expect(template).toContain('knowledge graph specialist');
-      expect(template).toContain('{{taskDescription}}');
-      expect(template).toContain('{{graphStatistics}}');
-      expect(template).toContain('Neo4j');
-      expect(template).toContain('nodes');
-      expect(template).toContain('relationships');
-    });
-  });
-
-  describe('graph operations', () => {
+  describe('task execution', () => {
     beforeEach(async () => {
       await navigator.initialize(mockConfig);
       await navigator.receiveTask(mockTask, mockContext);
     });
 
-    it('should execute custom Cypher queries', async () => {
-      const query = 'MATCH (n:Task) RETURN COUNT(n) as taskCount';
-      const result = await (navigator as any).executeCypherQuery(query);
-      
-      expect(mockCognitiveCanvas.executeQuery).toHaveBeenCalledWith(query);
-      expect(result).toBeDefined();
+    it('should accept a navigation task', async () => {
+      expect(navigator.getCurrentTask()).toEqual(mockTask);
+      expect(navigator.getTaskContext()).toEqual(mockContext);
+      expect(navigator.getStatus()).toBe('assigned');
     });
 
-    it('should analyze node distributions', async () => {
-      const nodeStats = await (navigator as any).analyzeNodeDistribution();
-      
-      expect(nodeStats.totalNodes).toBe(185);
-      expect(nodeStats.nodeTypes).toContain('Task');
-      expect(nodeStats.nodeTypes).toContain('Agent');
+    it('should execute navigation successfully', async () => {
+      const mockNavigationResult: NavigationResult = {
+        nodes: [
+          {
+            id: 'node-1',
+            type: 'authentication',
+            properties: { name: 'JWT Authentication' },
+            labels: ['security', 'auth'],
+            relevanceScore: 0.95
+          }
+        ],
+        relationships: [
+          {
+            id: 'rel-1',
+            source: 'node-1',
+            target: 'node-2',
+            type: 'IMPLEMENTS',
+            properties: {},
+            weight: 0.8
+          }
+        ],
+        paths: [
+          {
+            nodes: ['node-1', 'node-2'],
+            relationships: ['rel-1'],
+            weight: 0.8,
+            length: 2,
+            description: 'Authentication pattern path'
+          }
+        ],
+        insights: [
+          {
+            type: 'pattern',
+            description: 'Common authentication pattern found',
+            confidence: 0.9,
+            evidence: ['JWT usage', 'Token validation']
+          }
+        ],
+        metadata: {
+          queryTime: 150,
+          resultCount: 1,
+          confidence: 0.95
+        }
+      };
+
+      jest.spyOn(navigator as any, 'executeNavigation').mockResolvedValue(mockNavigationResult);
+      jest.spyOn(navigator as any, 'parseNavigationQuery').mockReturnValue({
+        type: 'semantic',
+        query: 'user authentication patterns',
+        context: { domain: 'security' }
+      });
+
+      const result = await navigator.run();
+
+      expect(result.success).toBe(true);
+      expect(result.result).toEqual(mockNavigationResult);
+      expect(navigator.getStatus()).toBe('completed');
     });
 
-    it('should find relationship patterns', async () => {
-      mockCognitiveCanvas.executeQuery.mockResolvedValue([
-        { relType: 'ASSIGNED_TO', count: 150 },
-        { relType: 'DEPENDS_ON', count: 200 },
-        { relType: 'CREATES', count: 100 }
-      ]);
+    it('should handle navigation errors', async () => {
+      jest.spyOn(navigator as any, 'parseNavigationQuery').mockReturnValue({
+        type: 'semantic',
+        query: 'invalid query'
+      });
+      jest.spyOn(navigator as any, 'executeNavigation').mockRejectedValue(new Error('Navigation failed'));
 
-      const patterns = await (navigator as any).findRelationshipPatterns();
-      
-      expect(patterns.totalRelationships).toBe(450);
-      expect(patterns.strongestPattern).toBe('DEPENDS_ON');
-    });
-
-    it('should detect orphaned nodes', async () => {
-      mockCognitiveCanvas.executeQuery.mockResolvedValue([
-        { nodeId: 'node-1', labels: ['Task'] },
-        { nodeId: 'node-2', labels: ['Agent'] }
-      ]);
-
-      const orphans = await (navigator as any).detectOrphanedNodes();
-      
-      expect(orphans).toHaveLength(2);
-      expect(orphans[0].nodeId).toBe('node-1');
+      await expect(navigator.run()).rejects.toThrow('Navigation failed');
+      expect(navigator.getStatus()).toBe('error');
     });
   });
 
-  describe('graph optimization', () => {
+  describe('navigation query parsing', () => {
     beforeEach(async () => {
       await navigator.initialize(mockConfig);
       await navigator.receiveTask(mockTask, mockContext);
     });
 
-    it('should identify optimization opportunities', () => {
-      const analysisContent = `
-## Optimizations
-1. **Orphaned Node Cleanup** - Remove 12 disconnected nodes
-2. **Index Optimization** - Add indexes on frequently queried properties
-3. **Relationship Pruning** - Remove 23 stale relationships
-`;
-      const optimizations = (navigator as any).parseOptimizations(analysisContent);
+    it('should parse navigation query from task context', () => {
+      const query = (navigator as any).parseNavigationQuery();
       
-      expect(optimizations).toHaveLength(3);
-      expect(optimizations[0].type).toBe('Orphaned Node Cleanup');
-      expect(optimizations[0].impact).toBe('Remove 12 disconnected nodes');
+      expect(query.type).toBe('semantic');
+      expect(query.query).toBe('user authentication patterns');
+      expect(query.context).toEqual({ domain: 'security' });
     });
 
-    it('should execute graph optimizations', async () => {
-      const optimizations = [
-        { type: 'Index Optimization', query: 'CREATE INDEX ON :Task(status)' },
-        { type: 'Cleanup', query: 'MATCH (n) WHERE NOT (n)--() DELETE n' }
+    it('should handle missing navigation query', () => {
+      const emptyContext = createMockContext({});
+      (navigator as any).taskContext = emptyContext;
+
+      expect(() => (navigator as any).parseNavigationQuery()).toThrow('No navigation query provided');
+    });
+  });
+
+  describe('query execution', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should execute semantic queries', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'authentication patterns',
+        context: { domain: 'security' }
+      };
+
+      const mockResult: NavigationResult = {
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 100, resultCount: 0, confidence: 0.8 }
+      };
+
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue(mockResult);
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result).toEqual(mockResult);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledWith(query);
+    });
+
+    it('should execute structural queries', async () => {
+      const query: NavigationQuery = {
+        type: 'structural',
+        query: 'find connected components',
+        context: {}
+      };
+
+      const mockResult: NavigationResult = {
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 150, resultCount: 0, confidence: 0.7 }
+      };
+
+      jest.spyOn(navigator as any, 'executeStructuralQuery').mockResolvedValue(mockResult);
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result).toEqual(mockResult);
+      expect((navigator as any).executeStructuralQuery).toHaveBeenCalledWith(query);
+    });
+
+    it('should execute temporal queries', async () => {
+      const query: NavigationQuery = {
+        type: 'temporal',
+        query: 'changes over time',
+        context: { timeframe: '30d' }
+      };
+
+      const mockResult: NavigationResult = {
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 200, resultCount: 0, confidence: 0.6 }
+      };
+
+      jest.spyOn(navigator as any, 'executeTemporalQuery').mockResolvedValue(mockResult);
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result).toEqual(mockResult);
+      expect((navigator as any).executeTemporalQuery).toHaveBeenCalledWith(query);
+    });
+
+    it('should execute causal queries', async () => {
+      const query: NavigationQuery = {
+        type: 'causal',
+        query: 'root cause analysis',
+        context: { issue: 'performance degradation' }
+      };
+
+      const mockResult: NavigationResult = {
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 300, resultCount: 0, confidence: 0.85 }
+      };
+
+      jest.spyOn(navigator as any, 'executeCausalQuery').mockResolvedValue(mockResult);
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result).toEqual(mockResult);
+      expect((navigator as any).executeCausalQuery).toHaveBeenCalledWith(query);
+    });
+  });
+
+  describe('caching', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should cache navigation results', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'test query',
+        context: {}
+      };
+
+      const mockResult: NavigationResult = {
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 100, resultCount: 0, confidence: 0.8 }
+      };
+
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue(mockResult);
+
+      // First call should execute the query
+      const result1 = await (navigator as any).executeNavigation(query);
+      expect(result1).toEqual(mockResult);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledTimes(1);
+
+      // Second call should use cache
+      const result2 = await (navigator as any).executeNavigation(query);
+      expect(result2).toEqual(mockResult);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledTimes(1);
+    });
+
+    it('should generate consistent cache keys', () => {
+      const query1: NavigationQuery = {
+        type: 'semantic',
+        query: 'test',
+        context: { a: 1 }
+      };
+
+      const query2: NavigationQuery = {
+        type: 'semantic',
+        query: 'test',
+        context: { a: 1 }
+      };
+
+      const key1 = (navigator as any).generateCacheKey(query1);
+      const key2 = (navigator as any).generateCacheKey(query2);
+
+      expect(key1).toBe(key2);
+    });
+  });
+
+  describe('internal state management', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should maintain query cache', () => {
+      expect((navigator as any).queryCache).toBeDefined();
+      expect((navigator as any).queryCache instanceof Map).toBe(true);
+    });
+
+    it('should maintain indexed paths', () => {
+      expect((navigator as any).indexedPaths).toBeDefined();
+      expect((navigator as any).indexedPaths instanceof Map).toBe(true);
+    });
+  });
+
+  // μT-2.4: Targeted query enforcement tests
+  describe('μT-2.4: Targeted Query Enforcement', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should enforce result limits for queries', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'find all nodes',
+        context: { limit: 10 }
+      };
+
+      jest.spyOn(navigator as any, 'sendToClaude').mockResolvedValue({
+        content: JSON.stringify({
+          nodes: Array(50).fill(null).map((_, i) => ({ id: `node-${i}`, type: 'test' })),
+          relationships: [],
+          paths: [],
+          insights: []
+        })
+      });
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result.nodes.length).toBeLessThanOrEqual(10);
+    });
+
+    it('should validate query specificity', () => {
+      const vagueQuery: NavigationQuery = {
+        type: 'semantic',
+        query: 'find everything',
+        context: {}
+      };
+
+      const specificQuery: NavigationQuery = {
+        type: 'semantic',
+        query: 'find authentication nodes with JWT properties',
+        context: { nodeType: 'auth', properties: ['jwt'] }
+      };
+
+      expect((navigator as any).isQueryTargeted(vagueQuery)).toBe(false);
+      expect((navigator as any).isQueryTargeted(specificQuery)).toBe(true);
+    });
+
+    it('should enforce selective property retrieval', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'user authentication',
+        context: { 
+          selectProperties: ['name', 'type', 'createdAt'],
+          excludeProperties: ['internalData', 'debugInfo']
+        }
+      };
+
+      jest.spyOn(navigator as any, 'sendToClaude').mockResolvedValue({
+        content: JSON.stringify({
+          nodes: [{
+            id: 'node-1',
+            type: 'auth',
+            properties: { name: 'JWT', type: 'token' },
+            labels: ['security']
+          }]
+        })
+      });
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      const node = result.nodes[0];
+      expect(node.properties).not.toHaveProperty('internalData');
+      expect(node.properties).not.toHaveProperty('debugInfo');
+    });
+
+    it('should apply depth limitations for path queries', async () => {
+      const sourceId = 'source-1';
+      const targetId = 'target-1';
+      const maxDepth = 3;
+
+      jest.spyOn(navigator as any, 'sendToClaude').mockResolvedValue({
+        content: JSON.stringify({
+          paths: [{
+            nodes: ['source-1', 'intermediate-1', 'intermediate-2', 'target-1'],
+            relationships: ['rel-1', 'rel-2', 'rel-3'],
+            length: 4,
+            weight: 0.8
+          }]
+        })
+      });
+
+      const paths = await navigator.findOptimalPaths(sourceId, targetId, maxDepth);
+      
+      expect(paths.every(path => path.length <= maxDepth)).toBe(true);
+    });
+
+    it('should enforce node type filtering', async () => {
+      const query: NavigationQuery = {
+        type: 'structural',
+        query: 'find hub nodes',
+        context: {},
+        filters: [{
+          type: 'node',
+          field: 'type',
+          operator: 'equals',
+          value: 'authentication'
+        }]
+      };
+
+      jest.spyOn(navigator as any, 'sendToClaude').mockResolvedValue({
+        content: JSON.stringify({
+          nodes: [
+            { id: 'node-1', type: 'authentication' },
+            { id: 'node-2', type: 'authorization' }
+          ]
+        })
+      });
+
+      const result = await (navigator as any).executeNavigation(query);
+      
+      expect(result.nodes.every((node: any) => node.type === 'authentication')).toBe(true);
+    });
+  });
+
+  // μT-2.5: Natural Language to Cypher translation tests
+  describe('μT-2.5: Natural Language to Cypher Translation', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should translate simple semantic queries to Cypher', () => {
+      const nlQuery = 'find all users with name John';
+      const expectedCypher = 'MATCH (u:User) WHERE u.name = "John" RETURN u';
+      
+      const cypher = (navigator as any).translateToCypher(nlQuery, { nodeType: 'User' });
+      
+      expect(cypher).toContain('MATCH (u:User)');
+      expect(cypher).toContain('u.name = "John"');
+      expect(cypher).toContain('RETURN u');
+    });
+
+    it('should handle relationship queries', () => {
+      const nlQuery = 'find users who follow other users';
+      const expectedPattern = 'MATCH (u1:User)-[:FOLLOWS]->(u2:User)';
+      
+      const cypher = (navigator as any).translateToCypher(nlQuery, { 
+        relationship: 'FOLLOWS',
+        sourceType: 'User',
+        targetType: 'User'
+      });
+      
+      expect(cypher).toContain('MATCH (u1:User)-[:FOLLOWS]->(u2:User)');
+    });
+
+    it('should build complex queries with multiple conditions', () => {
+      const nlQuery = 'find active users created after 2023 who have more than 10 posts';
+      
+      const cypher = (navigator as any).translateToCypher(nlQuery, {
+        nodeType: 'User',
+        conditions: [
+          { field: 'status', operator: '=', value: 'active' },
+          { field: 'createdAt', operator: '>', value: '2023-01-01' },
+          { field: 'postCount', operator: '>', value: 10 }
+        ]
+      });
+      
+      expect(cypher).toContain('u.status = "active"');
+      expect(cypher).toContain('u.createdAt > "2023-01-01"');
+      expect(cypher).toContain('u.postCount > 10');
+    });
+
+    it('should validate generated Cypher syntax', () => {
+      const validCypher = 'MATCH (n:Node) RETURN n';
+      const invalidCypher = 'MATCH (n:Node RETURN n'; // Missing closing parenthesis
+      
+      expect((navigator as any).validateCypherSyntax(validCypher)).toBe(true);
+      expect((navigator as any).validateCypherSyntax(invalidCypher)).toBe(false);
+    });
+
+    it('should handle aggregation queries', () => {
+      const nlQuery = 'count users by department';
+      
+      const cypher = (navigator as any).translateToCypher(nlQuery, {
+        nodeType: 'User',
+        aggregation: 'count',
+        groupBy: 'department'
+      });
+      
+      expect(cypher).toContain('COUNT(u)');
+      expect(cypher).toContain('u.department');
+      expect(cypher).toContain('GROUP BY');
+    });
+  });
+
+  // μT-2.6: Advanced caching and optimization tests
+  describe('μT-2.6: Advanced Caching and Optimization', () => {
+    beforeEach(async () => {
+      await navigator.initialize(mockConfig);
+    });
+
+    it('should implement LRU cache eviction', async () => {
+      // Clear caches and set small cache size for testing
+      (navigator as any).advancedCache.clear();
+      (navigator as any).queryCache.clear();
+      (navigator as any).cacheManager = { maxSize: 2, strategy: 'lru' };
+      
+      const queries = [
+        { type: 'semantic', query: 'query1', context: {} },
+        { type: 'semantic', query: 'query2', context: {} },
+        { type: 'semantic', query: 'query3', context: {} }
       ];
 
-      await (navigator as any).executeOptimizations(optimizations);
-      
-      expect(mockCognitiveCanvas.executeQuery).toHaveBeenCalledTimes(2);
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue({
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 100, resultCount: 0, confidence: 0.8 }
+      });
+
+      // Execute queries sequentially and check cache size
+      for (let i = 0; i < queries.length; i++) {
+        const cacheKey = (navigator as any).generateCacheKey(queries[i]);
+        console.log(`Query ${i + 1} cache key: ${cacheKey}`);
+        await (navigator as any).executeNavigation(queries[i]);
+        console.log(`After query ${i + 1}, cache size: ${(navigator as any).advancedCache.size}`);
+      }
+
+      // Cache should not exceed max size
+      expect((navigator as any).advancedCache.size).toBeLessThanOrEqual(2);
     });
 
-    it('should validate optimization safety', () => {
-      const optimization = {
-        type: 'Delete Operation',
-        query: 'MATCH (n) DELETE n' // Dangerous query
+    it('should implement query plan optimization', () => {
+      const complexQuery = {
+        type: 'semantic',
+        query: 'find connected patterns',
+        context: {
+          joins: ['users', 'posts', 'comments'],
+          filters: [{ field: 'active', value: true }]
+        }
       };
 
-      const isSafe = (navigator as any).validateOptimizationSafety(optimization);
-      expect(isSafe).toBe(false);
-    });
-  });
-
-  describe('graph health monitoring', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should perform comprehensive health check', async () => {
-      const healthCheck = await (navigator as any).performHealthCheck();
+      const optimizedPlan = (navigator as any).optimizeQueryPlan(complexQuery);
       
-      expect(healthCheck.isHealthy).toBe(true);
-      expect(healthCheck.checks).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ name: 'connectivity', status: 'pass' }),
-          expect.objectContaining({ name: 'integrity', status: 'pass' }),
-          expect.objectContaining({ name: 'performance', status: 'pass' })
-        ])
-      );
+      expect(optimizedPlan.executionOrder).toBeDefined();
+      expect(optimizedPlan.indexUsage).toBeDefined();
+      expect(optimizedPlan.estimatedCost).toBeLessThan(1000);
     });
 
-    it('should detect performance issues', async () => {
-      mockCognitiveCanvas.executeQuery.mockResolvedValue([
-        { query: 'MATCH (n) RETURN n', avgTime: 2500 }, // Slow query
-        { query: 'MATCH (a:Agent) RETURN a', avgTime: 150 }
-      ]);
+    it('should cache with TTL (time-to-live)', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'time-sensitive data',
+        context: { ttl: 1000 } // 1 second TTL
+      };
 
-      const perfIssues = await (navigator as any).detectPerformanceIssues();
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue({
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 100, resultCount: 0, confidence: 0.8 }
+      });
+
+      // First execution
+      await (navigator as any).executeNavigation(query);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledTimes(1);
+
+      // Second execution within TTL - should use cache
+      await (navigator as any).executeNavigation(query);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledTimes(1);
+
+      // Wait for TTL to expire and test again
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      await (navigator as any).executeNavigation(query);
+      expect((navigator as any).executeSemanticQuery).toHaveBeenCalledTimes(2);
+    });
+
+    it('should track query performance metrics', async () => {
+      const query: NavigationQuery = {
+        type: 'semantic',
+        query: 'performance test',
+        context: {}
+      };
+
+      // Clear caches and reset performance stats for this test
+      (navigator as any).advancedCache.clear();
+      (navigator as any).queryCache.clear();
+      (navigator as any).performanceStats = {
+        queryTimes: [],
+        cacheHits: 0,
+        cacheMisses: 0,
+        totalQueries: 0
+      };
+
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue({
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 250, resultCount: 5, confidence: 0.9 }
+      });
+
+      await (navigator as any).executeNavigation(query);
       
-      expect(perfIssues).toHaveLength(1);
-      expect(perfIssues[0].type).toBe('slow_query');
+      const metrics = (navigator as any).getPerformanceMetrics();
+      expect(metrics.averageQueryTime).toBeGreaterThan(0);
+      expect(metrics.cacheHitRatio).toBeDefined();
+      expect(metrics.queryCount).toBeGreaterThan(0);
     });
 
-    it('should validate data integrity', async () => {
-      const integrityCheck = await (navigator as any).validateDataIntegrity();
+    it('should implement smart cache warming', async () => {
+      const frequentQueries = [
+        { type: 'semantic', query: 'common pattern 1', context: {} },
+        { type: 'semantic', query: 'common pattern 2', context: {} }
+      ];
+
+      jest.spyOn(navigator as any, 'executeSemanticQuery').mockResolvedValue({
+        nodes: [],
+        relationships: [],
+        paths: [],
+        insights: [],
+        metadata: { queryTime: 100, resultCount: 0, confidence: 0.8 }
+      });
+
+      await (navigator as any).warmCache(frequentQueries);
       
-      expect(mockCognitiveCanvas.validateGraphIntegrity).toHaveBeenCalled();
-      expect(integrityCheck.isValid).toBe(true);
-    });
-  });
-
-  describe('path analysis', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should find critical paths', async () => {
-      mockCognitiveCanvas.findPaths.mockResolvedValue([
-        { path: ['Project-1', 'Task-1', 'Agent-1'], length: 3, strength: 0.8 },
-        { path: ['Project-1', 'Task-2', 'Agent-2'], length: 3, strength: 0.6 }
-      ]);
-
-      const criticalPaths = await (navigator as any).findCriticalPaths();
-      
-      expect(criticalPaths).toHaveLength(2);
-      expect(criticalPaths[0].strength).toBe(0.8);
-    });
-
-    it('should analyze dependency chains', async () => {
-      const dependencyChains = await (navigator as any).analyzeDependencyChains();
-      
-      expect(mockCognitiveCanvas.findPaths).toHaveBeenCalledWith(
-        expect.objectContaining({
-          relationshipType: 'DEPENDS_ON'
-        })
-      );
-    });
-  });
-
-  describe('data backup and recovery', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should create graph backup', async () => {
-      const backupId = await (navigator as any).createBackup();
-      
-      expect(mockCognitiveCanvas.createGraphBackup).toHaveBeenCalled();
-      expect(backupId).toBe('backup-123');
-    });
-
-    it('should restore from backup', async () => {
-      const success = await (navigator as any).restoreBackup('backup-123');
-      
-      expect(mockCognitiveCanvas.restoreGraphBackup).toHaveBeenCalledWith('backup-123');
-      expect(success).toBe(true);
-    });
-  });
-
-  describe('error handling', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should handle Neo4j connection errors', async () => {
-      mockCognitiveCanvas.executeQuery.mockRejectedValue(new Error('Neo4j connection failed'));
-      
-      await expect(navigator.executeTask()).rejects.toThrow('Failed to analyze knowledge graph');
-    });
-
-    it('should handle malformed Cypher queries', async () => {
-      const invalidQuery = 'INVALID CYPHER QUERY';
-      
-      await expect((navigator as any).executeCypherQuery(invalidQuery)).rejects.toThrow();
-    });
-
-    it('should validate task specification', async () => {
-      const invalidTask = { ...mockTask, title: '', description: '' };
-      await navigator.receiveTask(invalidTask, mockContext);
-      
-      await expect(navigator.executeTask()).rejects.toThrow('Invalid task specification');
-    });
-  });
-
-  describe('knowledge graph storage', () => {
-    beforeEach(async () => {
-      await navigator.initialize(mockConfig);
-      await navigator.receiveTask(mockTask, mockContext);
-    });
-
-    it('should create appropriate pheromone for analysis completion', async () => {
-      await navigator.executeTask();
-
-      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'knowledge_graph',
-          strength: 0.8,
-          context: 'graph_analysis_completed',
-          metadata: expect.objectContaining({
-            taskId: 'task-1',
-            totalNodes: expect.any(Number),
-            totalRelationships: expect.any(Number)
-          })
-        })
-      );
-    });
-
-    it('should store analysis results as graph metadata', async () => {
-      const storeMetadataSpy = jest.spyOn(navigator as any, 'storeAnalysisMetadata').mockResolvedValue(undefined);
-      
-      await navigator.executeTask();
-      
-      expect(storeMetadataSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          analysisType: 'full-graph-analysis',
-          results: expect.any(Object)
-        })
-      );
+      // Verify queries are pre-loaded in cache
+      for (const query of frequentQueries) {
+        const cacheKey = (navigator as any).generateCacheKey(query);
+        expect((navigator as any).queryCache.has(cacheKey)).toBe(true);
+      }
     });
   });
 });

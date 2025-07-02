@@ -72,10 +72,19 @@ describe('Orchestrator', () => {
         microtasks: ['Generate contracts']
       },
       {
+        name: 'Prototype Logic',
+        priority: 'High' as const,
+        description: 'Create prototype implementation based on formal contracts',
+        dependencies: ['Formalize Contracts'],
+        agent: 'Prototyper' as const,
+        acceptanceCriteria: ['Prototype logic implemented'],
+        microtasks: ['Create prototype']
+      },
+      {
         name: 'Feature 1',
         priority: 'High' as const,
         description: 'First feature with no dependencies',
-        dependencies: ['Formalize Contracts'],
+        dependencies: ['Prototype Logic'],
         agent: 'Architect' as const,
         acceptanceCriteria: ['Criterion 1'],
         microtasks: ['Task 1']
@@ -241,6 +250,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
     });
 
@@ -284,8 +294,8 @@ describe('Orchestrator', () => {
 
       await orchestrator.initialize('/test/project');
 
-      expect(mockCanvas.createTask).toHaveBeenCalledTimes(4);
-      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(3);
+      expect(mockCanvas.createTask).toHaveBeenCalledTimes(5);
+      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(4);
     });
 
     it('should store architectural decisions', async () => {
@@ -333,6 +343,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -419,6 +430,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -599,6 +611,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -784,6 +797,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -925,6 +939,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -1068,6 +1083,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -1175,6 +1191,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -1277,6 +1294,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
       
       await orchestrator.initialize('/test/project');
@@ -1384,6 +1402,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       await orchestrator.initialize('/test/project');
@@ -1432,13 +1451,14 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       await orchestrator.initialize('/test/project');
 
       // Verify the workflow sequence is correct
-      expect(mockCanvas.createTask).toHaveBeenCalledTimes(4);
-      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(3);
+      expect(mockCanvas.createTask).toHaveBeenCalledTimes(5);
+      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(4);
       
       // Verify workflow dependencies are created correctly
       expect(mockCanvas.createTaskDependency).toHaveBeenCalledWith(
@@ -1446,8 +1466,12 @@ describe('Orchestrator', () => {
         expect.any(String)  // Write BDD Specs task ID
       );
       expect(mockCanvas.createTaskDependency).toHaveBeenCalledWith(
-        expect.any(String), // Feature 1 task ID
+        expect.any(String), // Prototype Logic task ID
         expect.any(String)  // Formalize Contracts task ID
+      );
+      expect(mockCanvas.createTaskDependency).toHaveBeenCalledWith(
+        expect.any(String), // Feature 1 task ID  
+        expect.any(String)  // Prototype Logic task ID
       );
     });
 
@@ -1476,6 +1500,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       const mockTask = {
@@ -1539,6 +1564,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       const mockTask = {
@@ -1577,6 +1603,70 @@ describe('Orchestrator', () => {
       );
     });
 
+    it('should spawn Prototyper agent for prototype logic creation', async () => {
+      // Setup initialization mocks
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue('mock plan content');
+      (mockPath.join as jest.Mock).mockReturnValue('/test/path/plan.md');
+      mockParser.parse.mockReturnValue(mockParsedPlan);
+      mockParser.getDependencyOrder.mockReturnValue(mockParsedPlan.features);
+      mockCanvas.initializeSchema.mockResolvedValue(undefined);
+      const mockProject = {
+        id: 'project-123',
+        name: 'Test Project',
+        description: 'A test project for orchestrator',
+        status: 'initialized',
+        createdAt: new Date().toISOString()
+      };
+      mockCanvas.createProject.mockResolvedValue(mockProject);
+      mockCanvas.createTask.mockResolvedValue({
+        id: 'task-123',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
+      mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
+
+      const mockTask = {
+        id: 'task-prototyper',
+        title: 'Prototype Logic',
+        description: 'Create prototype implementation based on formal contracts',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      mockWorkspace.createWorktree.mockResolvedValue({
+        id: 'task-prototyper',
+        path: '/test/project/worktrees/task-prototyper',
+        branch: 'feature/task-prototyper',
+        baseBranch: 'main'
+      });
+
+      mockSession.createSession.mockResolvedValue({
+        sessionId: 'cortex-task-prototyper-123',
+        taskId: 'task-prototyper',
+        status: 'running',
+        createdAt: new Date()
+      });
+
+      mockSession.startAgentInSession.mockResolvedValue();
+
+      await orchestrator.initialize('/test/project');
+      await orchestrator.spawnAgent(mockTask, 'Prototyper');
+
+      expect(mockSession.startAgentInSession).toHaveBeenCalledWith(
+        'cortex-task-prototyper-123',
+        'claude-code',
+        expect.stringContaining('You are a Prototyper agent')
+      );
+    });
+
     it('should ensure SpecWriter completes before Formalizer starts', async () => {
       // Setup initialization mocks
       (mockFs.existsSync as jest.Mock).mockReturnValue(true);
@@ -1602,6 +1692,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       const specWriterTask = {
@@ -1693,6 +1784,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       const formalizerTask = {
@@ -1740,6 +1832,566 @@ describe('Orchestrator', () => {
     });
   });
 
+  describe('μT-4.6: Continuous Critique Integration', () => {
+    beforeEach(async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue('mock plan content');
+      (mockPath.join as jest.Mock).mockReturnValue('/test/path/plan.md');
+      mockParser.parse.mockReturnValue(mockParsedPlan);
+      mockParser.getDependencyOrder.mockReturnValue(mockParsedPlan.features);
+      mockCanvas.initializeSchema.mockResolvedValue(undefined);
+      const mockProject = {
+        id: 'project-123',
+        name: 'Test Project',
+        description: 'A test project for orchestrator',
+        status: 'initialized',
+        createdAt: new Date().toISOString()
+      };
+      mockCanvas.createProject.mockResolvedValue(mockProject);
+      mockCanvas.createTask.mockResolvedValue({
+        id: 'task-123',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
+      mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
+      
+      await orchestrator.initialize('/test/project');
+    });
+
+    it('should query Critique agent before processing next task', async () => {
+      const mockCritiqueAgent = {
+        analyzeArtifact: jest.fn().mockResolvedValue({
+          success: true,
+          critique: {
+            issues: [],
+            overallQuality: 'good',
+            recommendations: []
+          }
+        })
+      };
+
+      (orchestrator as any).critiqueAgent = mockCritiqueAgent;
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      mockCanvas.getTasksByProject.mockResolvedValue([mockTask]);
+      mockCanvas.getTaskDependencies.mockResolvedValue([]);
+
+      await orchestrator.processNextTask();
+
+      expect(mockCritiqueAgent.analyzeArtifact).toHaveBeenCalled();
+    });
+
+    it('should pause downstream tasks when critique finds high severity issues', async () => {
+      const mockCritiqueAgent = {
+        analyzeArtifact: jest.fn().mockResolvedValue({
+          success: true,
+          critique: {
+            issues: [
+              {
+                severity: 'high',
+                type: 'logic',
+                location: 'main.js',
+                description: 'Critical logic error found'
+              }
+            ],
+            overallQuality: 'poor',
+            recommendations: ['Fix logic error']
+          }
+        }),
+        generateStructuredFeedback: jest.fn().mockResolvedValue({
+          artifactId: 'artifact-1',
+          overallSeverity: 'high',
+          issues: [],
+          actionRequired: true,
+          pauseDownstream: true,
+          recommendations: [],
+          resolutionSteps: [],
+          priority: 'urgent'
+        })
+      };
+
+      (orchestrator as any).critiqueAgent = mockCritiqueAgent;
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      mockCanvas.getTasksByProject.mockResolvedValue([mockTask]);
+      mockCanvas.getTaskDependencies.mockResolvedValue([]);
+
+      const pauseDownstreamSpy = jest.spyOn(orchestrator, 'pauseDownstreamTasks' as any).mockResolvedValue(undefined);
+
+      await orchestrator.processNextTask();
+
+      expect(pauseDownstreamSpy).toHaveBeenCalledWith('project-123', 'high');
+    });
+
+    it('should continue processing when critique finds no critical issues', async () => {
+      const mockCritiqueAgent = {
+        analyzeArtifact: jest.fn().mockResolvedValue({
+          success: true,
+          critique: {
+            issues: [
+              {
+                severity: 'low',
+                type: 'style',
+                location: 'main.js',
+                description: 'Minor style issue'
+              }
+            ],
+            overallQuality: 'good',
+            recommendations: ['Consider style improvements']
+          }
+        }),
+        generateStructuredFeedback: jest.fn().mockResolvedValue({
+          artifactId: 'artifact-1',
+          overallSeverity: 'low',
+          issues: [],
+          actionRequired: false,
+          pauseDownstream: false,
+          recommendations: [],
+          resolutionSteps: [],
+          priority: 'low'
+        })
+      };
+
+      (orchestrator as any).critiqueAgent = mockCritiqueAgent;
+      (orchestrator as any).taskFeatureMap.set('task-1', {
+        name: 'Feature 1',
+        priority: 'High',
+        description: 'First feature',
+        dependencies: [],
+        agent: 'Architect',
+        acceptanceCriteria: ['Criterion 1'],
+        microtasks: ['Task 1']
+      });
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      mockCanvas.getTasksByProject.mockResolvedValue([mockTask]);
+      mockCanvas.getTaskDependencies.mockResolvedValue([]);
+
+      const spawnAgentSpy = jest.spyOn(orchestrator, 'spawnAgent').mockResolvedValue();
+
+      await orchestrator.processNextTask();
+
+      expect(spawnAgentSpy).toHaveBeenCalledWith(mockTask, 'Architect');
+    });
+  });
+
+  describe('μT-4.7: Debugger Agent Integration', () => {
+    beforeEach(async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue('mock plan content');
+      (mockPath.join as jest.Mock).mockReturnValue('/test/path/plan.md');
+      mockParser.parse.mockReturnValue(mockParsedPlan);
+      mockParser.getDependencyOrder.mockReturnValue(mockParsedPlan.features);
+      mockCanvas.initializeSchema.mockResolvedValue(undefined);
+      const mockProject = {
+        id: 'project-123',
+        name: 'Test Project',
+        description: 'A test project for orchestrator',
+        status: 'initialized',
+        createdAt: new Date().toISOString()
+      };
+      mockCanvas.createProject.mockResolvedValue(mockProject);
+      mockCanvas.createTask.mockResolvedValue({
+        id: 'task-123',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
+      mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
+      
+      await orchestrator.initialize('/test/project');
+    });
+
+    it('should spawn Debugger agent for task failures', async () => {
+      const mockDebuggerAgent = {
+        analyzeFailure: jest.fn().mockResolvedValue({
+          success: true,
+          diagnostic: {
+            rootCause: {
+              category: 'validation',
+              description: 'Input validation error',
+              confidence: 0.9
+            },
+            solutions: [
+              {
+                type: 'immediate',
+                description: 'Add input validation',
+                priority: 'high'
+              }
+            ]
+          }
+        })
+      };
+
+      (orchestrator as any).debuggerAgent = mockDebuggerAgent;
+
+      const mockFailure = {
+        id: 'failure-1',
+        taskId: 'task-1',
+        errorMessage: 'Validation failed',
+        severity: 'high',
+        type: 'validation_error'
+      };
+
+      mockCanvas.getFailureHistory = jest.fn().mockResolvedValue([mockFailure]);
+
+      await orchestrator.handleTaskFailure('task-1', mockFailure);
+
+      expect(mockDebuggerAgent.analyzeFailure).toHaveBeenCalledWith('failure-1');
+    });
+
+    it('should spawn both CodeSavant and Debugger for complex failures', async () => {
+      const mockDebuggerAgent = {
+        analyzeFailure: jest.fn().mockResolvedValue({
+          success: true,
+          diagnostic: {
+            rootCause: {
+              category: 'system',
+              description: 'Complex system failure',
+              confidence: 0.8
+            }
+          }
+        })
+      };
+
+      (orchestrator as any).debuggerAgent = mockDebuggerAgent;
+
+      const mockFailure = {
+        id: 'failure-1',
+        taskId: 'task-1',
+        errorMessage: 'Complex system error',
+        severity: 'critical',
+        type: 'system_failure'
+      };
+
+      mockSession.getSessionOutput.mockResolvedValue('Agent encountered system error');
+      mockWorkspace.createWorktree.mockResolvedValue({
+        id: 'codesavant-task-1',
+        path: '/test/project/worktrees/codesavant-task-1',
+        branch: 'helper/codesavant-task-1',
+        baseBranch: 'main'
+      });
+
+      mockSession.createSession.mockResolvedValue({
+        sessionId: 'codesavant-session-123',
+        taskId: 'codesavant-task-1',
+        status: 'running',
+        createdAt: new Date()
+      });
+
+      await orchestrator.handleTaskFailure('task-1', mockFailure);
+
+      expect(mockDebuggerAgent.analyzeFailure).toHaveBeenCalledWith('failure-1');
+      expect(mockSession.startAgentInSession).toHaveBeenCalledWith(
+        'codesavant-session-123',
+        'claude-code',
+        expect.stringContaining('CodeSavant')
+      );
+    });
+
+    it('should create warning pheromones from debugger diagnostics', async () => {
+      const mockDebuggerAgent = {
+        analyzeFailure: jest.fn().mockResolvedValue({
+          success: true,
+          diagnostic: {
+            rootCause: {
+              category: 'validation',
+              description: 'Recurring validation pattern',
+              confidence: 0.9
+            }
+          }
+        }),
+        createWarnPheromone: jest.fn().mockResolvedValue({
+          success: true,
+          pheromone: {
+            id: 'pheromone-1',
+            context: 'validation_pattern',
+            strength: 0.8
+          }
+        })
+      };
+
+      (orchestrator as any).debuggerAgent = mockDebuggerAgent;
+
+      const mockFailure = {
+        id: 'failure-1',
+        taskId: 'task-1',
+        errorMessage: 'Input validation failed',
+        severity: 'medium',
+        type: 'validation_error'
+      };
+
+      await orchestrator.handleTaskFailure('task-1', mockFailure);
+
+      expect(mockDebuggerAgent.createWarnPheromone).toHaveBeenCalledWith(
+        'validation_pattern',
+        expect.any(Object),
+        expect.any(Number)
+      );
+    });
+  });
+
+  describe('μT-4.8: CognitiveCanvasNavigator Context Priming', () => {
+    beforeEach(async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.readFileSync as jest.Mock).mockReturnValue('mock plan content');
+      (mockPath.join as jest.Mock).mockReturnValue('/test/path/plan.md');
+      mockParser.parse.mockReturnValue(mockParsedPlan);
+      mockParser.getDependencyOrder.mockReturnValue(mockParsedPlan.features);
+      mockCanvas.initializeSchema.mockResolvedValue(undefined);
+      const mockProject = {
+        id: 'project-123',
+        name: 'Test Project',
+        description: 'A test project for orchestrator',
+        status: 'initialized',
+        createdAt: new Date().toISOString()
+      };
+      mockCanvas.createProject.mockResolvedValue(mockProject);
+      mockCanvas.createTask.mockResolvedValue({
+        id: 'task-123',
+        title: 'Feature 1',
+        description: 'First feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
+      mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
+      
+      await orchestrator.initialize('/test/project');
+    });
+
+    it('should use CognitiveCanvasNavigator for targeted context retrieval', async () => {
+      const mockNavigator = {
+        executeNavigation: jest.fn().mockResolvedValue({
+          nodes: [
+            { id: 'node-1', type: 'artifact', properties: { name: 'Component A' } }
+          ],
+          relationships: [
+            { id: 'rel-1', source: 'node-1', target: 'node-2', type: 'depends_on' }
+          ],
+          paths: [],
+          insights: [
+            { type: 'pattern', description: 'Common usage pattern found', confidence: 0.8 }
+          ],
+          metadata: { queryTime: 100, resultCount: 2, confidence: 0.9 }
+        }),
+        findOptimalPaths: jest.fn().mockResolvedValue([
+          { nodes: ['node-1', 'node-2'], weight: 0.9, length: 2, description: 'Direct path' }
+        ])
+      };
+
+      (orchestrator as any).cognitiveCanvasNavigator = mockNavigator;
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Feature 1',
+        description: 'First feature requiring context',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      await (orchestrator as any).primeContextForTask('task-1', mockTask);
+
+      expect(mockNavigator.executeNavigation).toHaveBeenCalledWith({
+        type: 'semantic',
+        query: expect.stringContaining('Feature 1'),
+        context: expect.objectContaining({
+          taskId: 'task-1',
+          taskType: 'feature_implementation'
+        })
+      });
+    });
+
+    it('should retrieve relevant artifacts and patterns for context priming', async () => {
+      const mockNavigator = {
+        executeNavigation: jest.fn().mockResolvedValue({
+          nodes: [
+            { 
+              id: 'artifact-1', 
+              type: 'code', 
+              properties: { 
+                name: 'UserService.js',
+                relevanceScore: 0.9
+              }
+            }
+          ],
+          relationships: [],
+          paths: [],
+          insights: [
+            {
+              type: 'usage_pattern',
+              description: 'Frequently used service pattern',
+              confidence: 0.85,
+              evidence: ['Similar tasks in project history']
+            }
+          ],
+          metadata: { queryTime: 150, resultCount: 1, confidence: 0.85 }
+        })
+      };
+
+      (orchestrator as any).cognitiveCanvasNavigator = mockNavigator;
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Implement User Authentication',
+        description: 'Add authentication to the user service',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      const context = await (orchestrator as any).primeContextForTask('task-1', mockTask);
+
+      expect(context.relevantArtifacts).toHaveLength(1);
+      expect(context.relevantArtifacts?.[0]?.name).toBe('UserService.js');
+      expect(context.patterns).toHaveLength(1);
+      expect(context.patterns?.[0]?.type).toBe('usage_pattern');
+    });
+
+    it('should use targeted context instead of broad data retrieval', async () => {
+      const mockNavigator = {
+        executeNavigation: jest.fn().mockResolvedValue({
+          nodes: [],
+          relationships: [],
+          paths: [],
+          insights: [],
+          metadata: { queryTime: 50, resultCount: 0, confidence: 0.5 }
+        })
+      };
+
+      (orchestrator as any).cognitiveCanvasNavigator = mockNavigator;
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'New Feature',
+        description: 'Completely new feature',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      // Mock the old broad retrieval method to verify it's not called
+      const broadRetrievalSpy = jest.spyOn(orchestrator, 'retrieveAllProjectData' as any).mockResolvedValue({});
+
+      await (orchestrator as any).primeContextForTask('task-1', mockTask);
+
+      expect(mockNavigator.executeNavigation).toHaveBeenCalled();
+      expect(broadRetrievalSpy).not.toHaveBeenCalled();
+    });
+
+    it('should provide context-primed prompts to agents', async () => {
+      const mockNavigator = {
+        executeNavigation: jest.fn().mockResolvedValue({
+          nodes: [
+            { 
+              id: 'pattern-1', 
+              type: 'pattern',
+              properties: { 
+                name: 'Authentication Pattern',
+                description: 'Standard auth implementation'
+              }
+            }
+          ],
+          relationships: [],
+          paths: [],
+          insights: [
+            {
+              type: 'recommendation',
+              description: 'Use JWT for stateless authentication',
+              confidence: 0.9
+            }
+          ],
+          metadata: { queryTime: 80, resultCount: 1, confidence: 0.9 }
+        })
+      };
+
+      (orchestrator as any).cognitiveCanvasNavigator = mockNavigator;
+      (orchestrator as any).taskFeatureMap.set('task-1', {
+        name: 'Feature 1',
+        priority: 'High',
+        description: 'Authentication feature',
+        dependencies: [],
+        agent: 'Architect',
+        acceptanceCriteria: ['Secure auth'],
+        microtasks: ['Implement JWT']
+      });
+
+      const mockTask = {
+        id: 'task-1',
+        title: 'Implement Authentication',
+        description: 'Add JWT authentication',
+        status: 'pending',
+        priority: 'High',
+        projectId: 'project-123',
+        createdAt: new Date().toISOString()
+      };
+
+      mockWorkspace.createWorktree.mockResolvedValue({
+        id: 'task-1',
+        path: '/test/project/worktrees/task-1',
+        branch: 'feature/task-1',
+        baseBranch: 'main'
+      });
+
+      mockSession.createSession.mockResolvedValue({
+        sessionId: 'cortex-task-1-123',
+        taskId: 'task-1',
+        status: 'running',
+        createdAt: new Date()
+      });
+
+      mockSession.startAgentInSession.mockResolvedValue();
+
+      await orchestrator.spawnAgent(mockTask, 'Architect');
+
+      const promptCall = mockSession.startAgentInSession.mock.calls[0][2];
+      expect(promptCall).toContain('Authentication Pattern');
+      expect(promptCall).toContain('Use JWT for stateless authentication');
+    });
+  });
+
   describe('Integration Tests', () => {
     it('should complete full orchestration flow', async () => {
       // Setup complete flow
@@ -1766,6 +2418,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       // Initialize
@@ -1773,8 +2426,8 @@ describe('Orchestrator', () => {
 
       // Verify initialization
       expect(mockCanvas.createProject).toHaveBeenCalled();
-      expect(mockCanvas.createTask).toHaveBeenCalledTimes(4);
-      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(3);
+      expect(mockCanvas.createTask).toHaveBeenCalledTimes(5);
+      expect(mockCanvas.createTaskDependency).toHaveBeenCalledTimes(4);
     });
 
     it('should handle full impasse resolution workflow', async () => {
@@ -1802,6 +2455,7 @@ describe('Orchestrator', () => {
         projectId: 'project-123',
         createdAt: new Date().toISOString()
       });
+      mockCanvas.getTasksByProject.mockResolvedValue([]);
       mockWorkspace.getProjectRoot.mockReturnValue('/test/project');
 
       await orchestrator.initialize('/test/project');
@@ -1848,6 +2502,52 @@ describe('Orchestrator', () => {
         'claude-code',
         expect.stringContaining('CodeSavant')
       );
+    });
+  });
+
+  describe('PheromoneData Interface', () => {
+    it('should create pheromone with all required properties', async () => {
+      // This test will fail until we fix the interface
+      const pheromoneData = {
+        id: 'pheromone-123',
+        type: 'success_pheromone',
+        strength: 0.8,
+        context: 'critique_success_test',
+        metadata: {
+          taskId: 'task-123',
+          artifactId: 'artifact-456',
+          workflowStep: 'test',
+          timestamp: new Date().toISOString()
+        },
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+      };
+
+      mockCanvas.createPheromone.mockResolvedValue(pheromoneData);
+
+      const result = await mockCanvas.createPheromone(pheromoneData);
+      
+      expect(result).toEqual(pheromoneData);
+      expect(mockCanvas.createPheromone).toHaveBeenCalledWith(pheromoneData);
+    });
+
+    it('should handle pheromone creation without optional expiresAt', async () => {
+      const pheromoneData = {
+        id: 'pheromone-124',
+        type: 'learning_pheromone',
+        strength: 0.6,
+        context: 'task_completion',
+        metadata: { agentId: 'agent-789' },
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 3600000).toISOString()
+      };
+
+      mockCanvas.createPheromone.mockResolvedValue(pheromoneData);
+
+      const result = await mockCanvas.createPheromone(pheromoneData);
+      
+      expect(result).toEqual(pheromoneData);
+      expect(mockCanvas.createPheromone).toHaveBeenCalledWith(pheromoneData);
     });
   });
 });

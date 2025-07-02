@@ -1,6 +1,7 @@
 import { LondonTester } from '../../src/agents/london-tester';
 import { AgentConfig, TaskContext, TaskData } from '../../src/agent';
 import { ClaudeModel } from '../../src/claude-client';
+import { setupMocks, createMockAgentConfig, createMockTask, createMockContext, suppressConsoleWarnings } from '../test-utils';
 
 describe('LondonTester', () => {
   let londonTester: LondonTester;
@@ -8,56 +9,30 @@ describe('LondonTester', () => {
   let mockTask: TaskData;
   let mockContext: TaskContext;
 
+  setupMocks();
+  suppressConsoleWarnings();
+
   beforeEach(() => {
-    mockConfig = {
-      id: 'london-tester-1',
-      role: 'london-tester',
-      capabilities: ['mock-based-testing', 'behavior-verification', 'interaction-testing'],
-      claudeConfig: {
-        apiKey: 'test-api-key',
-        defaultModel: ClaudeModel.SONNET,
-        maxTokens: 4096,
-        temperature: 0.7
-      },
-      workspaceRoot: '/tmp/test-workspace',
-      cognitiveCanvasConfig: {
-        uri: 'neo4j://localhost:7687',
-        username: 'neo4j',
-        password: 'test-password'
-      }
-    };
+    mockConfig = createMockAgentConfig(
+      'london-tester-1',
+      'london-tester',
+      ['mock-based-testing', 'behavior-verification', 'interaction-testing']
+    );
 
-    mockTask = {
-      id: 'test-task-1',
-      title: 'Create unit tests for UserService',
-      description: 'Write mockist-style tests focusing on behavior verification',
-      status: 'pending',
-      priority: 'high',
-      projectId: 'test-project',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    } as TaskData & {
-      assignedTo: string;
-      dependencies: any[];
-      metadata: any;
-    };
-
-    (mockTask as any).assignedTo = 'london-tester-1';
-    (mockTask as any).dependencies = [];
+    mockTask = createMockTask(
+      'test-task-1',
+      'Create unit tests for UserService',
+      'Write mockist-style tests focusing on behavior verification'
+    );
     (mockTask as any).metadata = {
       testType: 'unit',
       testingStyle: 'mockist',
       targetClass: 'UserService'
     };
 
-    mockContext = {
-      projectInfo: {
-        name: 'TestProject',
-        language: 'typescript'
-      },
-      files: ['src/services/UserService.ts'],
-      testFramework: 'jest'
-    };
+    mockContext = createMockContext({
+      files: ['src/services/UserService.ts']
+    });
 
     londonTester = new LondonTester();
   });

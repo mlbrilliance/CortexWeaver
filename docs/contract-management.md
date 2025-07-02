@@ -1,8 +1,12 @@
 # Contract Management in Cognitive Canvas
 
-This document describes how to use the extended Cognitive Canvas to store relationships between contracts, code modules, and tests as required by the Specification-Driven Development (SDD) approach.
+This document describes how to use the extended Cognitive Canvas to store relationships between contracts, code modules, and tests as required by the **Specification-Driven Development (SDD)** approach.
+
+> **Note**: For a complete overview of the SDD workflow, see [SDD_WORKFLOW.md](../.claude/SDD_WORKFLOW.md).
 
 ## Overview
+
+The Cognitive Canvas has been extended to support Specification-Driven Development (SDD), which addresses **"The Oracle's Dilemma"** - the challenge of providing unambiguous specifications to AI agents. Instead of relying on natural language requirements that can be interpreted differently, SDD uses formal contracts stored in the Cognitive Canvas as the single source of truth.
 
 The Cognitive Canvas has been extended to support:
 
@@ -10,6 +14,7 @@ The Cognitive Canvas has been extended to support:
 - **Code Module nodes**: Functions, classes, modules, and components that implement contracts
 - **Test nodes**: Unit, integration, e2e, and contract tests that validate implementations
 - **Rich relationships**: Links between contracts, features, implementations, and tests
+- **SDD Workflow Tracking**: Complete traceability from BDD scenarios to formal contracts to implementation
 
 ## Key Features
 

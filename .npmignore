@@ -1,70 +1,375 @@
-# Source files
+# CortexWeaver 4.0 Comprehensive .npmignore File
+# ==================================================
+# Optimized for npm publishing - excludes development files while keeping
+# essential runtime files for the CortexWeaver CLI tool
+
+# =====================================
+# Source Files (Keep only compiled JS)
+# =====================================
+
+# TypeScript source files (exclude - use compiled JS)
 src/
 *.ts
 !*.d.ts
+!dist/**/*.d.ts
 
-# Development files
-.env
-.mcp.json
-CLAUDE.md
-.claude/
-
-# Test files
-tests/
-test-init/
-*.test.js
-*.test.ts
-__tests__/
-coverage/
-
-# Development configurations
-jest.config.js
-tsconfig.json
-.eslintrc*
-.prettierrc*
-.vscode/
-.idea/
-
-# Build artifacts (keep only dist/)
+# TypeScript build artifacts
 *.tsbuildinfo
 *.js.map
 *.d.ts.map
 
-# Version control
+# =====================================
+# Development & Testing Files
+# =====================================
+
+# Test files and directories
+tests/
+test/
+__tests__/
+*.test.js
+*.test.ts
+*.test.mjs
+*.spec.js
+*.spec.ts
+*.spec.mjs
+test-init/
+test-local-install/
+test-results/
+coverage/
+.nyc_output/
+jest-coverage/
+.jest-cache/
+
+# Testing configuration
+jest.config.js
+jest.config.ts
+jest.config.mjs
+vitest.config.js
+vitest.config.ts
+playwright.config.js
+playwright.config.ts
+cypress.config.js
+cypress.config.ts
+
+# =====================================
+# Development Configuration Files
+# =====================================
+
+# Build and development configs
+tsconfig.json
+tsconfig.*.json
+webpack.config.js
+rollup.config.js
+vite.config.js
+babel.config.js
+.babelrc
+.eslintrc*
+.eslintignore
+.prettierrc*
+.prettierignore
+.editorconfig
+
+# Package manager files
+.npmrc
+.yarnrc
+.yarnrc.yml
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+lerna.json
+nx.json
+
+# =====================================
+# Development Tools & IDE Files
+# =====================================
+
+# IDE and editor configurations
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.atom/
+*.swp
+*.swo
+*~
+
+# Git and version control
 .git/
 .gitignore
+.gitattributes
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
 
-# Dependencies
+# =====================================
+# Environment & Configuration
+# =====================================
+
+# Environment and secret files
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+api_keys.json
+config/development.json
+config/test.json
+config/local.json
+
+# CortexWeaver development configs
+.claude/
+CLAUDE.md
+.mcp.json
+.cortexweaver/cache/
+.cortexweaver/logs/
+.cortexweaver/temp/
+.cortex-history/
+
+# =====================================
+# Dependencies & Node Modules
+# =====================================
+
+# Dependencies (npm will install these)
 node_modules/
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Optional npm cache directory
+.npm
 
-# Runtime data
-pids
+# =====================================
+# Build Artifacts & Temporary Files
+# =====================================
+
+# Build directories (keep only dist/)
+build/
+lib/
+out/
+temp/
+tmp/
+.tmp/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
 *.pid
 *.seed
 *.pid.lock
 
-# Temporary files
-.tmp/
-temp/
-*.tmp
+# Cache directories
+.cache/
+.parcel-cache/
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
 
-# Test directories and files
-test-local-install/
+# =====================================
+# Logs & Runtime Data
+# =====================================
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# =====================================
+# Documentation Development Files
+# =====================================
+
+# Documentation source (keep only generated docs)
+docs/src/
+docs/development/
+*.md.bak
+*.md.tmp
+
+# Documentation build tools
+.vuepress/
+.docusaurus/
+mkdocs.yml
+sphinx/
+
+# =====================================
+# CI/CD & Deployment Files
+# =====================================
+
+# CI/CD configurations
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+.jenkins/
+azure-pipelines.yml
+buildspec.yml
+Dockerfile.dev
+docker-compose.dev.yml
+docker-compose.test.yml
+
+# Deployment configurations
+.terraform/
+*.tfstate
+*.tfstate.*
+.pulumi/
+k8s/dev/
+k8s/test/
+
+# =====================================
+# Security & Analysis Tools
+# =====================================
+
+# Security scanning
+.snyk
+.security/
+security-reports/
+
+# Code analysis
+.sonarqube/
+.scannerwork/
+eslint-report.json
+tslint-report.json
+
+# =====================================
+# Package & Archive Files
+# =====================================
 
 # Package files
 *.tgz
+*.tar.gz
+*.zip
+*.rar
+*.7z
 
-# OS files
+# OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-# Editor files
-*~
-*.swp
-*.swo
+# =====================================
+# Development Databases
+# =====================================
+
+# Development databases
+*.db
+*.sqlite
+*.sqlite3
+neo4j-dev/
+redis-dump.rdb
+
+# =====================================
+# Performance & Profiling
+# =====================================
+
+# Performance files
+*.perf
+*.prof
+*.trace
+profiling-data/
+benchmark-results/
+load-test-results/
+
+# =====================================
+# Backup & Archive Files
+# =====================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# =====================================
+# CortexWeaver Specific Development Files
+# =====================================
+
+# Agent development workspaces
+agent-workspaces/
+prototype-workspace/
+debug-workspace/
+critique-workspace/
+knowledge-workspace/
+
+# Development logs and artifacts
+*.agent.log
+*.agent.tmp
+agent-*.pid
+cognitive-canvas-snapshots/
+worktrees/*/
+tmux-sessions.log
+
+# Experimental and sandbox files
+experiments/
+sandbox/
+playground/
+prototypes/dev/
+prototypes/test/
+
+# Performance development files
+performance-reports/
+diagnostic-logs/
+memory-dumps/
+
+# =====================================
+# Keep Essential Files for Runtime
+# =====================================
+
+# Essential files to INCLUDE in package:
+# - dist/ (compiled JavaScript)
+# - package.json
+# - README.md
+# - LICENSE
+# - CHANGELOG.md
+# - .npmignore (this file)
+# - Any runtime configuration templates
+
+# Files that should be included (negation patterns):
+!dist/
+!package.json
+!README.md
+!LICENSE
+!CHANGELOG.md
+!.npmignore
+
+# Include essential runtime templates
+!templates/
+!prompts/default/
+!docker-compose.yml
+!.cortexweaver/config.template.json
+
+# =====================================
+# Final Notes
+# =====================================
+
+# This .npmignore ensures the published package contains:
+# 1. Compiled JavaScript (dist/)
+# 2. Essential runtime files
+# 3. Default templates and configurations
+# 4. Documentation
+# 
+# While excluding:
+# 1. Source TypeScript files
+# 2. Development dependencies
+# 3. Test files and configurations
+# 4. Development tools and IDE configs
+# 5. Temporary and cache files
+# 6. CI/CD and deployment configs
+
+# END OF CORTEXWEAVER 4.0 .NPMIGNORE

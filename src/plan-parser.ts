@@ -3,7 +3,7 @@ export interface Feature {
   priority: 'High' | 'Medium' | 'Low';
   description: string;
   dependencies: string[];
-  agent: 'SpecWriter' | 'Formalizer' | 'Architect' | 'Coder' | 'Tester';
+  agent: 'SpecWriter' | 'Formalizer' | 'Prototyper' | 'Architect' | 'Coder' | 'Tester';
   acceptanceCriteria: string[];
   microtasks: string[];
 }
@@ -28,7 +28,7 @@ export interface ParsedPlan {
 
 export class PlanParser {
   private readonly VALID_PRIORITIES = ['High', 'Medium', 'Low'];
-  private readonly VALID_AGENTS = ['SpecWriter', 'Formalizer', 'Architect', 'Coder', 'Tester'];
+  private readonly VALID_AGENTS = ['SpecWriter', 'Formalizer', 'Prototyper', 'Architect', 'Coder', 'Tester'];
 
   parse(planContent: string): ParsedPlan {
     const lines = planContent.split('\n');
@@ -219,7 +219,7 @@ export class PlanParser {
         if (!value || !this.VALID_AGENTS.includes(value)) {
           throw new Error(`Invalid agent: ${value}`);
         }
-        feature.agent = value as 'SpecWriter' | 'Formalizer' | 'Architect' | 'Coder' | 'Tester';
+        feature.agent = value as 'SpecWriter' | 'Formalizer' | 'Prototyper' | 'Architect' | 'Coder' | 'Tester';
         break;
       default:
         // Ignore unknown properties

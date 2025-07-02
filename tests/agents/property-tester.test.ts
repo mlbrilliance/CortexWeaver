@@ -1,12 +1,16 @@
 import { PropertyTester } from '../../src/agents/property-tester';
 import { AgentConfig, TaskContext, TaskData } from '../../src/agent';
 import { ClaudeModel } from '../../src/claude-client';
+import { setupMocks, suppressConsoleWarnings } from '../test-utils';
 
 describe('PropertyTester', () => {
   let propertyTester: PropertyTester;
   let mockConfig: AgentConfig;
   let mockTask: TaskData;
   let mockContext: TaskContext;
+
+  setupMocks();
+  suppressConsoleWarnings();
 
   beforeEach(() => {
     mockConfig = {

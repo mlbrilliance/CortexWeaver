@@ -77,6 +77,12 @@ describe('CognitiveCanvas', () => {
         'CREATE CONSTRAINT pheromone_id IF NOT EXISTS FOR (ph:Pheromone) REQUIRE ph.id IS UNIQUE'
       );
       expect(mockSession.run).toHaveBeenCalledWith(
+        'CREATE CONSTRAINT guide_pheromone_id IF NOT EXISTS FOR (gp:guide_pheromone) REQUIRE gp.id IS UNIQUE'
+      );
+      expect(mockSession.run).toHaveBeenCalledWith(
+        'CREATE CONSTRAINT warn_pheromone_id IF NOT EXISTS FOR (wp:warn_pheromone) REQUIRE wp.id IS UNIQUE'
+      );
+      expect(mockSession.run).toHaveBeenCalledWith(
         'CREATE CONSTRAINT contract_id IF NOT EXISTS FOR (c:Contract) REQUIRE c.id IS UNIQUE'
       );
       expect(mockSession.run).toHaveBeenCalledWith(
@@ -351,101 +357,590 @@ describe('CognitiveCanvas', () => {
     });
   });
 
-  describe('pheromone system', () => {
-    it('should create a new pheromone node', async () => {
-      const pheromoneData = {
-        id: 'pheromone-1',
-        type: 'success',
-        strength: 0.8,
-        context: 'task completion',
-        metadata: { taskId: 'task-1', agentId: 'agent-1' },
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 86400000).toISOString()
-      };
+  describe('enhanced pheromone learning system (3.0)', () => {
+    const samplePattern = {
+      taskOutcome: 'success' as const,
+      promptPattern: 'implement unit tests for class',
+      codePattern: 'Jest test framework',
+      agentType: 'coder',
+      complexity: 'medium' as const,
+      duration: 1200,
+      errorTypes: []
+    };
 
-      mockSession.run.mockResolvedValue({
-        records: [{
-          get: jest.fn().mockReturnValue({
-            properties: pheromoneData
-          })
-        }]
-      } as any);
+    describe('basic pheromone creation', () => {
+      it('should create a new pheromone node with enhanced structure', async () => {
+        const pheromoneData = {
+          id: 'pheromone-1',
+          type: 'guide_pheromone',
+          strength: 0.8,
+          context: 'task completion',
+          pattern: samplePattern,
+          metadata: { taskId: 'task-1', agentId: 'agent-1' },
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+          decayRate: 0.05
+        };
 
-      const result = await cognitiveCanvas.createPheromone(pheromoneData);
-
-      expect(mockSession.run).toHaveBeenCalledWith(
-        'CREATE (ph:Pheromone {id: $id, type: $type, strength: $strength, context: $context, metadata: $metadata, createdAt: $createdAt, expiresAt: $expiresAt}) RETURN ph',
-        pheromoneData
-      );
-      expect(result).toEqual(pheromoneData);
-      expect(mockSession.close).toHaveBeenCalled();
-    });
-
-    it('should link pheromone to task', async () => {
-      mockSession.run.mockResolvedValue({
-        records: [{
-          get: jest.fn().mockReturnValue({
-            type: 'INFLUENCES'
-          })
-        }]
-      } as any);
-
-      await cognitiveCanvas.linkPheromoneToTask('pheromone-1', 'task-1');
-
-      expect(mockSession.run).toHaveBeenCalledWith(
-        'MATCH (ph:Pheromone {id: $pheromoneId}), (t:Task {id: $taskId}) CREATE (ph)-[r:INFLUENCES]->(t) RETURN r',
-        { pheromoneId: 'pheromone-1', taskId: 'task-1' }
-      );
-      expect(mockSession.close).toHaveBeenCalled();
-    });
-
-    it('should get pheromones by type', async () => {
-      const pheromones = [
-        { properties: { id: 'pheromone-1', type: 'success', strength: 0.8 } },
-        { properties: { id: 'pheromone-2', type: 'success', strength: 0.6 } }
-      ];
-
-      mockSession.run.mockResolvedValue({
-        records: pheromones.map(ph => ({
-          get: jest.fn().mockReturnValue(ph)
-        }))
-      } as any);
-
-      const result = await cognitiveCanvas.getPheromonesByType('success');
-
-      expect(mockSession.run).toHaveBeenCalledWith(
-        'MATCH (ph:Pheromone {type: $type}) WHERE ph.expiresAt > $now RETURN ph ORDER BY ph.strength DESC',
-        expect.objectContaining({
-          type: 'success',
-          now: expect.any(String)
-        })
-      );
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({ id: 'pheromone-1', type: 'success', strength: 0.8 });
-      expect(mockSession.close).toHaveBeenCalled();
-    });
-
-    it('should clean expired pheromones', async () => {
-      mockSession.run.mockResolvedValue({
-        summary: {
-          counters: {
-            updates: jest.fn().mockReturnValue({
-              nodesDeleted: 5
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: pheromoneData
             })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.createPheromone(pheromoneData);
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (ph:Pheromone:guide_pheromone'),
+          expect.objectContaining({
+            ...pheromoneData,
+            decayRate: 0.05
+          })
+        );
+        expect(result).toEqual(pheromoneData);
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should validate pheromone data structure', async () => {
+        const invalidPheromoneData = {
+          id: 'pheromone-1',
+          type: 'guide_pheromone',
+          strength: 1.5, // Invalid: > 1
+          context: 'task completion',
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 86400000).toISOString()
+        };
+
+        await expect(cognitiveCanvas.createPheromone(invalidPheromoneData as any))
+          .rejects.toThrow('Pheromone strength must be between 0 and 1');
+      });
+
+      it('should validate pattern data', async () => {
+        const invalidPatternData = {
+          id: 'pheromone-1',
+          type: 'guide_pheromone',
+          strength: 0.8,
+          context: 'task completion',
+          pattern: {
+            taskOutcome: 'invalid_outcome', // Invalid outcome
+            promptPattern: 'test pattern',
+            agentType: 'coder',
+            complexity: 'medium',
+            duration: 1000
+          },
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 86400000).toISOString()
+        };
+
+        await expect(cognitiveCanvas.createPheromone(invalidPatternData as any))
+          .rejects.toThrow('Invalid task outcome');
+      });
+    });
+
+    describe('specialized pheromone creation', () => {
+      it('should create guide pheromone for successful patterns', async () => {
+        const expectedPheromone = {
+          id: expect.stringMatching(/^guide_/),
+          type: 'guide_pheromone',
+          strength: 0.7,
+          context: 'successful testing approach',
+          pattern: samplePattern,
+          decayRate: 0.05,
+          metadata: expect.any(Object),
+          createdAt: expect.any(String),
+          expiresAt: expect.any(String)
+        };
+        
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: expectedPheromone
+            })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.createGuidePheromone(
+          'successful testing approach',
+          samplePattern,
+          0.7
+        );
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (ph:Pheromone:guide_pheromone'),
+          expect.objectContaining({
+            type: 'guide_pheromone',
+            strength: 0.7,
+            context: 'successful testing approach',
+            pattern: samplePattern,
+            decayRate: 0.05
+          })
+        );
+        expect(result).toEqual(expectedPheromone);
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should create warn pheromone for failed patterns', async () => {
+        const failurePattern = {
+          ...samplePattern,
+          taskOutcome: 'failure' as const,
+          errorTypes: ['timeout', 'compilation_error']
+        };
+
+        const expectedWarnPheromone = {
+          id: expect.stringMatching(/^warn_/),
+          type: 'warn_pheromone',
+          strength: 0.8,
+          context: 'problematic approach',
+          pattern: failurePattern,
+          decayRate: 0.15,
+          metadata: expect.any(Object),
+          createdAt: expect.any(String),
+          expiresAt: expect.any(String)
+        };
+
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: expectedWarnPheromone
+            })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.createWarnPheromone(
+          'problematic approach',
+          failurePattern,
+          0.8
+        );
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (ph:Pheromone:warn_pheromone'),
+          expect.objectContaining({
+            type: 'warn_pheromone',
+            strength: 0.8,
+            context: 'problematic approach',
+            pattern: failurePattern,
+            decayRate: 0.15
+          })
+        );
+        expect(result).toEqual(expectedWarnPheromone);
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+    });
+
+    describe('advanced querying', () => {
+      it('should query pheromones with complex filters', async () => {
+        const mockPheromones = [
+          { properties: { id: 'ph-1', type: 'guide_pheromone', strength: 0.8, pattern: { agentType: 'coder' } } },
+          { properties: { id: 'ph-2', type: 'guide_pheromone', strength: 0.6, pattern: { agentType: 'coder' } } }
+        ];
+
+        mockSession.run.mockResolvedValue({
+          records: mockPheromones.map(ph => ({
+            get: jest.fn().mockReturnValue(ph)
+          }))
+        } as any);
+
+        const result = await cognitiveCanvas.queryPheromones({
+          type: 'guide_pheromone',
+          agentType: 'coder',
+          minStrength: 0.5,
+          limit: 10
+        });
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('MATCH (ph:Pheromone)'),
+          expect.objectContaining({
+            type: 'guide_pheromone',
+            agentType: 'coder',
+            minStrength: 0.5,
+            limit: 10,
+            now: expect.any(String)
+          })
+        );
+        expect(result).toHaveLength(2);
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should get context-relevant pheromones for orchestrator', async () => {
+        const mockGuides = [
+          { properties: { id: 'guide-1', type: 'guide_pheromone', pattern: { agentType: 'coder', complexity: 'medium' } } }
+        ];
+        const mockWarnings = [
+          { properties: { id: 'warn-1', type: 'warn_pheromone', pattern: { agentType: 'coder', complexity: 'medium' } } }
+        ];
+
+        mockSession.run
+          .mockResolvedValueOnce({
+            records: mockGuides.map(ph => ({ get: jest.fn().mockReturnValue(ph) }))
+          } as any)
+          .mockResolvedValueOnce({
+            records: mockWarnings.map(ph => ({ get: jest.fn().mockReturnValue(ph) }))
+          } as any);
+
+        const result = await cognitiveCanvas.getContextPheromones(
+          'coder',
+          'implement unit tests',
+          'medium'
+        );
+
+        expect(result.guides).toHaveLength(1);
+        expect(result.warnings).toHaveLength(1);
+        expect(result.guides[0].pattern?.agentType).toBe('coder');
+        expect(mockSession.close).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('pattern analysis and correlations', () => {
+      it('should analyze pattern correlations', async () => {
+        // Mock the record object with proper get method that returns correct values
+        const mockRecord = {
+          get: jest.fn((key: string) => {
+            switch (key) {
+              case 'ph': return { properties: { id: 'ph-1' } };
+              case 'pattern': return samplePattern;
+              case 'promptPatterns': return ['test pattern 1', 'test pattern 2'];
+              case 'frequency': return 5;
+              case 'successRate': return 0.8;
+              default: return null;
+            }
+          })
+        };
+        
+        const mockCorrelationData = [mockRecord];
+
+        mockSession.run.mockResolvedValue({
+          records: mockCorrelationData
+        } as any);
+
+        const result = await cognitiveCanvas.analyzePatternCorrelations('coder');
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('MATCH (ph:Pheromone)'),
+          expect.objectContaining({
+            agentType: 'coder',
+            now: expect.any(String)
+          })
+        );
+        expect(result).toHaveLength(1);
+        expect(result[0].pheromoneId).toBe('ph-1');
+        expect(result[0].correlationScore).toBe(0.4); // 0.8 * Math.min(5/10, 1) = 0.8 * 0.5 = 0.4
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should perform temporal analysis of patterns', async () => {
+        const mockTemporalData = [
+          {
+            get: jest.fn()
+              .mockReturnValueOnce(samplePattern)
+              .mockReturnValueOnce(3)
+              .mockReturnValueOnce(0.9)
+              .mockReturnValueOnce('2024-01-01T00:00:00Z')
+              .mockReturnValueOnce('2024-01-03T00:00:00Z')
           }
-        }
-      } as any);
+        ];
 
-      const result = await cognitiveCanvas.cleanExpiredPheromones();
+        mockSession.run.mockResolvedValue({
+          records: mockTemporalData
+        } as any);
 
-      expect(mockSession.run).toHaveBeenCalledWith(
-        'MATCH (ph:Pheromone) WHERE ph.expiresAt <= $now DETACH DELETE ph',
-        expect.objectContaining({
-          now: expect.any(String)
-        })
-      );
-      expect(result).toBe(5);
-      expect(mockSession.close).toHaveBeenCalled();
+        const result = await cognitiveCanvas.analyzeTemporalPatterns('coder');
+
+        expect(result).toHaveLength(1);
+        expect(result[0].pattern).toEqual(samplePattern);
+        expect(result[0].frequency).toBe(3);
+        expect(result[0].successRate).toBe(0.9);
+        expect(result[0].evolutionTrend).toBe('improving');
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should provide comprehensive pheromone analysis', async () => {
+        const mockStatsData = [
+          {
+            get: jest.fn()
+              .mockReturnValueOnce(10)   // totalPheromones
+              .mockReturnValueOnce(6)    // guidePheromones
+              .mockReturnValueOnce(4)    // warnPheromones
+              .mockReturnValueOnce(0.7)  // avgStrength
+          }
+        ];
+
+        mockSession.run.mockResolvedValueOnce({
+          records: mockStatsData
+        } as any);
+
+        // Mock correlation analysis
+        jest.spyOn(cognitiveCanvas, 'analyzePatternCorrelations').mockResolvedValue([
+          {
+            pheromoneId: 'ph-1',
+            correlatedPatterns: [samplePattern],
+            correlationScore: 0.8,
+            temporalTrend: 'increasing',
+            recommendations: ['replicate pattern']
+          }
+        ]);
+
+        // Mock temporal analysis
+        jest.spyOn(cognitiveCanvas, 'analyzeTemporalPatterns').mockResolvedValue([
+          {
+            pattern: samplePattern,
+            frequency: 5,
+            successRate: 0.9,
+            evolutionTrend: 'improving',
+            timeframe: { start: '2024-01-01T00:00:00Z', end: '2024-01-07T00:00:00Z' }
+          }
+        ]);
+
+        const result = await cognitiveCanvas.getPheromoneAnalysis('coder');
+
+        expect(result.totalPheromones).toBe(10);
+        expect(result.guidePheromones).toBe(6);
+        expect(result.warnPheromones).toBe(4);
+        expect(result.avgStrength).toBe(0.7);
+        expect(result.correlations).toHaveLength(1);
+        expect(result.temporalInsights).toHaveLength(1);
+      });
+    });
+
+    describe('pheromone decay and lifecycle', () => {
+      it('should apply pheromone decay correctly', async () => {
+        mockSession.run
+          .mockResolvedValueOnce({
+            records: [{ get: jest.fn().mockReturnValue(5) }]
+          } as any)
+          .mockResolvedValueOnce({
+            records: [{ get: jest.fn().mockReturnValue(2) }]
+          } as any);
+
+        const result = await cognitiveCanvas.applyPheromoneDecay();
+
+        expect(result.updated).toBe(5);
+        expect(result.expired).toBe(2);
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('SET ph.strength = ph.strength * (1 - ph.decayRate)'),
+          expect.any(Object)
+        );
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('ph.expiresAt <= $now OR ph.strength <= 0.1'),
+          expect.any(Object)
+        );
+        expect(mockSession.close).toHaveBeenCalledTimes(2);
+      });
+
+      it('should link pheromone to task with influence type', async () => {
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              type: 'INFLUENCES'
+            })
+          }]
+        } as any);
+
+        await cognitiveCanvas.linkPheromoneToTask('pheromone-1', 'task-1', 'negative');
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (ph)-[r:INFLUENCES {type: $influence'),
+          expect.objectContaining({
+            pheromoneId: 'pheromone-1',
+            taskId: 'task-1',
+            influence: 'negative',
+            createdAt: expect.any(String)
+          })
+        );
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+    });
+
+    describe('backwards compatibility', () => {
+      it('should maintain compatibility with legacy pheromone queries', async () => {
+        const legacyPheromones = [
+          { properties: { id: 'legacy-1', type: 'success', strength: 0.8 } }
+        ];
+
+        // Mock the new queryPheromones method which getPheromonesByType now uses
+        jest.spyOn(cognitiveCanvas, 'queryPheromones').mockResolvedValue(
+          legacyPheromones.map(ph => ph.properties as any)
+        );
+
+        const result = await cognitiveCanvas.getPheromonesByType('success');
+
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('legacy-1');
+      });
+
+      it('should handle legacy pheromone types with warning', async () => {
+        const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+        
+        const legacyPheromoneData = {
+          id: 'legacy-1',
+          type: 'success', // Legacy type
+          strength: 0.8,
+          context: 'legacy context',
+          metadata: {},
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 86400000).toISOString()
+        };
+
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: legacyPheromoneData
+            })
+          }]
+        } as any);
+
+        await cognitiveCanvas.createPheromone(legacyPheromoneData);
+
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Using legacy pheromone type: success')
+        );
+        
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('error handling', () => {
+      it('should handle malformed pheromone data gracefully', async () => {
+        const malformedData = {
+          id: 'bad-pheromone',
+          // Missing required fields
+          strength: 0.8
+        };
+
+        await expect(cognitiveCanvas.createPheromone(malformedData as any))
+          .rejects.toThrow('Missing required pheromone fields');
+      });
+
+      it('should handle database errors in pattern analysis', async () => {
+        mockSession.run.mockRejectedValue(new Error('Database connection failed'));
+
+        await expect(cognitiveCanvas.analyzePatternCorrelations())
+          .rejects.toThrow('Database connection failed');
+        
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+
+      it('should handle empty results in temporal analysis', async () => {
+        mockSession.run.mockResolvedValue({
+          records: []
+        } as any);
+
+        const result = await cognitiveCanvas.analyzeTemporalPatterns('nonexistent-agent');
+
+        expect(result).toEqual([]);
+        expect(mockSession.close).toHaveBeenCalled();
+      });
+    });
+
+    describe('orchestrator integration', () => {
+      it('should support Orchestrator context priming with enhanced pheromones', async () => {
+        // Mock context pheromones response
+        const mockGuides = [
+          { properties: { id: 'guide-1', type: 'guide_pheromone', strength: 0.9, pattern: { agentType: 'coder', complexity: 'medium' } } }
+        ];
+        const mockWarnings = [
+          { properties: { id: 'warn-1', type: 'warn_pheromone', strength: 0.8, pattern: { agentType: 'coder', complexity: 'medium' } } }
+        ];
+
+        mockSession.run
+          .mockResolvedValueOnce({
+            records: mockGuides.map(ph => ({ get: jest.fn().mockReturnValue(ph) }))
+          } as any)
+          .mockResolvedValueOnce({
+            records: mockWarnings.map(ph => ({ get: jest.fn().mockReturnValue(ph) }))
+          } as any);
+
+        const result = await cognitiveCanvas.getContextPheromones(
+          'coder',
+          'implement unit tests for authentication',
+          'medium'
+        );
+
+        expect(result.guides).toHaveLength(1);
+        expect(result.warnings).toHaveLength(1);
+        expect(result.guides[0].type).toBe('guide_pheromone');
+        expect(result.warnings[0].type).toBe('warn_pheromone');
+        expect(mockSession.close).toHaveBeenCalledTimes(2);
+      });
+
+      it('should create learning patterns from task outcomes', async () => {
+        const successPattern = {
+          taskOutcome: 'success' as const,
+          promptPattern: 'implement unit tests with mocking',
+          codePattern: 'Jest with @jest/globals',
+          agentType: 'coder',
+          complexity: 'medium' as const,
+          duration: 1800,
+          errorTypes: []
+        };
+
+        const expectedGuidePheromone = {
+          id: expect.stringMatching(/^guide_/),
+          type: 'guide_pheromone',
+          strength: 0.8,
+          context: 'successful testing implementation',
+          pattern: successPattern,
+          decayRate: 0.05,
+          metadata: expect.objectContaining({
+            successPattern: true,
+            agentType: 'coder'
+          }),
+          createdAt: expect.any(String),
+          expiresAt: expect.any(String)
+        };
+
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: expectedGuidePheromone
+            })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.createGuidePheromone(
+          'successful testing implementation',
+          successPattern,
+          0.8
+        );
+
+        expect(result).toEqual(expectedGuidePheromone);
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (ph:Pheromone:guide_pheromone'),
+          expect.objectContaining({
+            type: 'guide_pheromone',
+            pattern: successPattern,
+            decayRate: 0.05
+          })
+        );
+      });
+
+      it('should provide pattern evolution insights for agent improvement', async () => {
+        const mockEvolutionData = [
+          {
+            get: jest.fn()
+              .mockReturnValueOnce(samplePattern)
+              .mockReturnValueOnce(10)
+              .mockReturnValueOnce(0.85)
+              .mockReturnValueOnce('2024-01-01T00:00:00Z')
+              .mockReturnValueOnce('2024-01-07T00:00:00Z')
+          }
+        ];
+
+        mockSession.run.mockResolvedValue({
+          records: mockEvolutionData
+        } as any);
+
+        const insights = await cognitiveCanvas.analyzeTemporalPatterns('coder', 604800000);
+
+        expect(insights).toHaveLength(1);
+        expect(insights[0].evolutionTrend).toBe('improving');
+        expect(insights[0].frequency).toBe(10);
+        expect(insights[0].successRate).toBe(0.85);
+        expect(insights[0].pattern).toEqual(samplePattern);
+      });
     });
   });
 
@@ -1241,7 +1736,12 @@ describe('CognitiveCanvas', () => {
       });
 
       it('should handle auto-save errors gracefully', async () => {
-        mockSession.run.mockRejectedValue(new Error('Database connection lost'));
+        // Mock the saveSnapshot method to throw an error
+        const saveSnapshotSpy = jest.spyOn(cognitiveCanvas, 'saveSnapshot')
+          .mockRejectedValue(new Error('Database connection lost'));
+        
+        // Mock console.error to capture the error log
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
         await cognitiveCanvas.autoSaveSnapshot();
 
@@ -1249,10 +1749,17 @@ describe('CognitiveCanvas', () => {
         const intervalCallback = (global.setInterval as jest.Mock).mock.calls[0][0];
         
         // This should not throw, but log the error
-        await expect(intervalCallback()).resolves.toBeUndefined();
+        await intervalCallback();
 
-        // Should not crash the application - error is logged but execution continues
-        expect(true).toBe(true); // Test passes if no exception thrown
+        // Should log the error but not crash
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          'Auto-save failed:',
+          expect.any(Error)
+        );
+        
+        // Restore mocks
+        saveSnapshotSpy.mockRestore();
+        consoleErrorSpy.mockRestore();
       }, 10000);
     });
 
@@ -1315,6 +1822,148 @@ describe('CognitiveCanvas', () => {
           .filter(call => call[0].includes('CREATE'));
         
         expect(createNodeCalls.length).toBeGreaterThan(1);
+      });
+    });
+  });
+
+  describe('Missing Methods - TDD Tests', () => {
+    describe('createPrototypeNode', () => {
+      it('should create a prototype node and return its ID', async () => {
+        const prototypeData = {
+          contractId: 'contract-123',
+          pseudocode: 'function example() { return "hello"; }',
+          flowDiagram: 'Start -> Process -> End',
+          outputPath: '/tmp/prototype.js'
+        };
+
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({
+              properties: { id: 'prototype-456' }
+            })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.createPrototypeNode(prototypeData);
+
+        expect(result).toBe('prototype-456');
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('CREATE (p:Prototype'),
+          expect.objectContaining({
+            contractId: 'contract-123',
+            pseudocode: 'function example() { return "hello"; }',
+            flowDiagram: 'Start -> Process -> End',
+            outputPath: '/tmp/prototype.js'
+          })
+        );
+      });
+
+      it('should throw error if prototype creation fails', async () => {
+        const prototypeData = {
+          contractId: 'contract-123',
+          pseudocode: 'function example() { return "hello"; }',
+          flowDiagram: 'Start -> Process -> End',
+          outputPath: '/tmp/prototype.js'
+        };
+
+        mockSession.run.mockResolvedValue({ records: [] } as any);
+
+        await expect(cognitiveCanvas.createPrototypeNode(prototypeData))
+          .rejects.toThrow('Failed to create prototype node');
+      });
+    });
+
+    describe('linkPrototypeToContract', () => {
+      it('should create a relationship between prototype and contract', async () => {
+        mockSession.run.mockResolvedValue({ records: [] } as any);
+
+        await cognitiveCanvas.linkPrototypeToContract('prototype-456', 'contract-123');
+
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('MATCH (p:Prototype {id: $prototypeId}), (c:Contract {id: $contractId}) CREATE (p)-[r:PROTOTYPES]->(c)'),
+          { prototypeId: 'prototype-456', contractId: 'contract-123', linkedAt: expect.any(String) }
+        );
+      });
+    });
+
+    describe('getContextPheromones', () => {
+      it('should return pheromones separated into guides and warnings', async () => {
+        const mockPheromones = [
+          { id: 'ph1', type: 'guide', strength: 0.8, context: 'typescript development' },
+          { id: 'ph2', type: 'warn', strength: 0.6, context: 'javascript patterns' }
+        ];
+
+        mockSession.run.mockResolvedValue({
+          records: mockPheromones.map(ph => ({
+            get: jest.fn().mockReturnValue({ properties: ph })
+          }))
+        } as any);
+
+        const result = await cognitiveCanvas.getContextPheromones(
+          'architect',
+          'typescript development',
+          'high'
+        );
+
+        expect(result.guides).toEqual([mockPheromones[0]]);
+        expect(result.warnings).toEqual([mockPheromones[1]]);
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('MATCH (ph:Pheromone)'),
+          expect.objectContaining({
+            agentType: 'architect',
+            taskContext: 'typescript development',
+            taskComplexity: 'high'
+          })
+        );
+      });
+
+      it('should return empty guides and warnings when no pheromones match', async () => {
+        mockSession.run.mockResolvedValue({ records: [] } as any);
+
+        const result = await cognitiveCanvas.getContextPheromones(
+          'coder',
+          'python development',
+          'low'
+        );
+
+        expect(result.guides).toEqual([]);
+        expect(result.warnings).toEqual([]);
+      });
+    });
+
+    describe('updateTaskStatus', () => {
+      it('should update task status and return updated task', async () => {
+        const updatedTask = {
+          id: 'task-123',
+          title: 'Test Task',
+          status: 'paused',
+          updatedAt: expect.any(String)
+        };
+
+        mockSession.run.mockResolvedValue({
+          records: [{
+            get: jest.fn().mockReturnValue({ properties: updatedTask })
+          }]
+        } as any);
+
+        const result = await cognitiveCanvas.updateTaskStatus('task-123', 'paused');
+
+        expect(result).toEqual(updatedTask);
+        expect(mockSession.run).toHaveBeenCalledWith(
+          expect.stringContaining('MATCH (t:Task {id: $id}) SET t.status = $status, t.updatedAt = $updatedAt RETURN t'),
+          expect.objectContaining({
+            id: 'task-123',
+            status: 'paused',
+            updatedAt: expect.any(String)
+          })
+        );
+      });
+
+      it('should throw error if task not found', async () => {
+        mockSession.run.mockResolvedValue({ records: [] } as any);
+
+        await expect(cognitiveCanvas.updateTaskStatus('nonexistent-task', 'completed'))
+          .rejects.toThrow('Task with id nonexistent-task not found');
       });
     });
   });

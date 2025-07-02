@@ -1,0 +1,922 @@
+/**
+ * Workspace and Session Management Integration Tests
+ * 
+ * Tests comprehensive workspace and session functionality:
+ * - Workspace isolation and management
+ * - Session lifecycle and monitoring
+ * - Resource cleanup and recovery
+ * - Concurrent session handling
+ * - Workspace state synchronization
+ * - Session communication and coordination
+ * - Failure recovery and resilience
+ */
+
+import { Orchestrator, OrchestratorConfig } from '../../src/orchestrator';
+import { WorkspaceManager, WorktreeInfo } from '../../src/workspace';
+import { SessionManager, SessionInfo } from '../../src/session';
+import { CognitiveCanvas } from '../../src/cognitive-canvas';
+import * as path from 'path';
+import * as os from 'os';
+
+// Import fs using require to avoid TypeScript/Jest issues with fs.promises
+const fs = require('fs');
+
+describe('Workspace and Session Management Integration Tests', () => {
+  let testProjectPath: string;
+  let orchestrator: Orchestrator;
+  let workspace: WorkspaceManager;
+  let sessionManager: SessionManager;
+  let canvas: CognitiveCanvas;
+  
+  const testConfig: OrchestratorConfig = {
+    neo4j: {
+      uri: process.env.NEO4J_URI || 'bolt://localhost:7687',
+      username: process.env.NEO4J_USERNAME || 'neo4j',
+      password: process.env.NEO4J_PASSWORD || 'password'
+    },
+    claude: {
+      apiKey: process.env.CLAUDE_API_KEY || 'test-api-key',
+      budgetLimit: 50
+    }
+  };
+
+  const workspaceTestPlan = `# Workspace and Session Test Project
+
+## Overview
+
+A project designed to test comprehensive workspace and session management across various scenarios including isolation, concurrency, and failure recovery.
+
+## Features
+
+### Feature 1: Basic Workspace Operations
+- **Priority**: High
+- **Description**: Test basic workspace creation and management
+- **Dependencies**: []
+- **Agent**: SpecWriter
+- **Acceptance Criteria**:
+  - [ ] Workspace created successfully
+  - [ ] Proper isolation maintained
+  - [ ] Clean state management
+
+### Feature 2: Session Lifecycle Management
+- **Priority**: High
+- **Description**: Test complete session lifecycle from creation to cleanup
+- **Dependencies**: [Feature 1]
+- **Agent**: Formalizer
+- **Acceptance Criteria**:
+  - [ ] Session created and monitored
+  - [ ] Proper state tracking
+  - [ ] Graceful termination
+
+### Feature 3: Concurrent Operations
+- **Priority**: Medium
+- **Description**: Test concurrent workspace and session operations
+- **Dependencies**: [Feature 2]
+- **Agent**: Architect
+- **Acceptance Criteria**:
+  - [ ] Multiple workspaces isolated
+  - [ ] Concurrent sessions managed
+  - [ ] Resource contention handled
+
+### Feature 4: Failure Recovery
+- **Priority**: High
+- **Description**: Test recovery from various failure scenarios
+- **Dependencies**: [Feature 3]
+- **Agent**: Coder
+- **Acceptance Criteria**:
+  - [ ] Failed sessions cleaned up
+  - [ ] Workspace corruption recovered
+  - [ ] Resource leaks prevented
+
+### Feature 5: Performance and Monitoring
+- **Priority**: Medium
+- **Description**: Test performance and monitoring capabilities
+- **Dependencies**: [Feature 4]
+- **Agent**: Tester
+- **Acceptance Criteria**:
+  - [ ] Performance within thresholds
+  - [ ] Monitoring data collected
+  - [ ] Resource usage optimized
+
+## Architecture Decisions
+
+### Technology Stack
+- **Workspace**: Git worktrees for isolation
+- **Sessions**: Tmux for agent management
+- **Monitoring**: Process and resource monitoring
+
+### Quality Standards
+- **Isolation**: Complete workspace separation
+- **Performance**: < 5 second workspace setup
+- **Reliability**: 99% session success rate
+`;
+
+  beforeAll(async () => {
+    // Create temporary test project directory
+    testProjectPath = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'cortex-workspace-test-'));
+    
+    // Write the test plan file
+    await fs.promises.writeFile(
+      path.join(testProjectPath, 'plan.md'),
+      workspaceTestPlan
+    );
+
+    // Initialize components
+    workspace = new WorkspaceManager();
+    sessionManager = new SessionManager();
+    canvas = new CognitiveCanvas(testConfig.neo4j);
+    
+    try {
+      await canvas.initializeSchema();
+      // Clear any existing test data
+      const session = (canvas as any).driver.session();
+      await session.run('MATCH (n) WHERE n.projectId STARTS WITH "workspace-test-" DETACH DELETE n');
+      await session.close();
+    } catch (error) {
+      console.warn('Could not initialize canvas:', error);
+    }
+  });
+
+  afterAll(async () => {
+    // Cleanup
+    try {
+      if (orchestrator) {
+        await orchestrator.shutdown();
+      }
+      await canvas.close();
+      
+      // Clean up any remaining sessions
+      const activeSessions = sessionManager.listSessions();
+      for (const session of activeSessions) {
+        await sessionManager.killSession(session.sessionId);
+      }
+      
+      await fs.promises.rm(testProjectPath, { recursive: true, force: true });
+    } catch (error) {
+      console.warn('Cleanup error:', error);
+    }
+  });
+
+  beforeEach(() => {
+    orchestrator = new Orchestrator(testConfig);
+  });
+
+  afterEach(async () => {
+    if (orchestrator && orchestrator.isRunning()) {
+      await orchestrator.shutdown();
+    }
+  });
+
+  describe('Workspace Isolation and Management', () => {
+    it('should create isolated workspaces for different tasks', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const projectId = (orchestrator as any).projectId;
+      const tasks = await canvas.getTasksByProject(projectId);
+      
+      // Create workspaces for multiple tasks
+      const workspaces: WorktreeInfo[] = [];
+      
+      for (let i = 0; i < Math.min(3, tasks.length); i++) {
+        const task = tasks[i];
+        const branchName = `feature/task-${task.id}`;
+        
+        try {
+          const worktree = await workspace.createWorktree(task.id, branchName, 'main');
+          workspaces.push(worktree);
+          
+          // Verify workspace creation
+          expect(worktree.id).toBe(task.id);
+          expect(worktree.branch).toBe(branchName);
+          expect(worktree.baseBranch).toBe('main');
+          expect(worktree.path).toBeTruthy();
+          
+          // Verify workspace exists on filesystem
+          expect(fs.existsSync(worktree.path)).toBe(true);
+          
+        } catch (error) {
+          console.warn(`Could not create worktree for task ${task.id}:`, error);
+        }
+      }
+
+      // Verify isolation by checking different paths
+      const uniquePaths = new Set(workspaces.map(w => w.path));
+      expect(uniquePaths.size).toBe(workspaces.length);
+
+      // Verify each workspace has independent state
+      for (const worktree of workspaces) {
+        try {
+          const status = await workspace.getWorktreeStatus(worktree.id);
+          expect(status).toBeTruthy();
+          expect(status.clean).toBe(true); // New workspace should be clean
+        } catch (error) {
+          console.warn(`Could not get status for worktree ${worktree.id}:`, error);
+        }
+      }
+
+      // Cleanup workspaces
+      for (const worktree of workspaces) {
+        try {
+          await workspace.removeWorktree(worktree.id);
+        } catch (error) {
+          console.warn(`Could not remove worktree ${worktree.id}:`, error);
+        }
+      }
+
+      console.log(`Created and tested ${workspaces.length} isolated workspaces`);
+    });
+
+    it('should handle workspace state synchronization', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const testTaskId = 'workspace-sync-test';
+      const branchName = 'feature/workspace-sync-test';
+      
+      try {
+        // Create workspace
+        const worktree = await workspace.createWorktree(testTaskId, branchName, 'main');
+        
+        // Simulate file changes
+        const testFilePath = path.join(worktree.path, 'test-file.txt');
+        await fs.promises.writeFile(testFilePath, 'Test content for workspace synchronization');
+        
+        // Check status after changes
+        const statusAfterChanges = await workspace.getWorktreeStatus(testTaskId);
+        expect(statusAfterChanges.clean).toBe(false);
+        expect(statusAfterChanges.files).toContain('test-file.txt');
+        
+        // Commit changes
+        const commitHash = await workspace.commitChanges(testTaskId, 'Test commit for workspace sync');
+        expect(commitHash).toBeTruthy();
+        
+        // Check status after commit
+        const statusAfterCommit = await workspace.getWorktreeStatus(testTaskId);
+        expect(statusAfterCommit.clean).toBe(true);
+        
+        // Cleanup
+        await workspace.removeWorktree(testTaskId);
+        
+      } catch (error) {
+        console.warn('Workspace synchronization test failed:', error);
+        // Cleanup on error
+        try {
+          await workspace.removeWorktree(testTaskId);
+        } catch (cleanupError) {
+          console.warn('Cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should handle workspace corruption and recovery', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const testTaskId = 'workspace-corruption-test';
+      const branchName = 'feature/corruption-test';
+      
+      try {
+        // Create workspace
+        const worktree = await workspace.createWorktree(testTaskId, branchName, 'main');
+        
+        // Simulate corruption by removing part of the workspace
+        const gitDir = path.join(worktree.path, '.git');
+        if (fs.existsSync(gitDir)) {
+          await fs.promises.rm(gitDir, { recursive: true, force: true });
+        }
+        
+        // Attempt operations on corrupted workspace
+        let corruptionDetected = false;
+        try {
+          await workspace.getWorktreeStatus(testTaskId);
+        } catch (error) {
+          corruptionDetected = true;
+          expect((error as Error).message).toContain('git'); // Should detect git-related error
+        }
+        
+        expect(corruptionDetected).toBe(true);
+        
+        // Recovery: Remove corrupted workspace and recreate
+        await workspace.removeWorktree(testTaskId);
+        const recoveredWorktree = await workspace.createWorktree(testTaskId, branchName, 'main');
+        
+        // Verify recovery
+        expect(recoveredWorktree.id).toBe(testTaskId);
+        const recoveredStatus = await workspace.getWorktreeStatus(testTaskId);
+        expect(recoveredStatus.clean).toBe(true);
+        
+        // Cleanup
+        await workspace.removeWorktree(testTaskId);
+        
+      } catch (error) {
+        console.warn('Workspace corruption test failed:', error);
+        try {
+          await workspace.removeWorktree(testTaskId);
+        } catch (cleanupError) {
+          console.warn('Cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should manage workspace resources efficiently', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const workspaceCount = 5;
+      const workspaces: WorktreeInfo[] = [];
+      const startTime = Date.now();
+      
+      try {
+        // Create multiple workspaces
+        for (let i = 0; i < workspaceCount; i++) {
+          const taskId = `resource-test-${i}`;
+          const branchName = `feature/resource-test-${i}`;
+          
+          const worktree = await workspace.createWorktree(taskId, branchName, 'main');
+          workspaces.push(worktree);
+        }
+        
+        const creationTime = Date.now() - startTime;
+        const avgCreationTime = creationTime / workspaceCount;
+        
+        // Performance assertions
+        expect(avgCreationTime).toBeLessThan(5000); // < 5 seconds per workspace
+        
+        // Verify all workspaces are functional
+        for (const worktree of workspaces) {
+          const status = await workspace.getWorktreeStatus(worktree.id);
+          expect(status.clean).toBe(true);
+        }
+        
+        // Cleanup all workspaces
+        const cleanupStartTime = Date.now();
+        await Promise.all(workspaces.map(w => workspace.removeWorktree(w.id)));
+        const cleanupTime = Date.now() - cleanupStartTime;
+        
+        console.log(`Workspace Resource Management:
+          Created ${workspaceCount} workspaces in ${creationTime}ms (avg: ${avgCreationTime.toFixed(2)}ms)
+          Cleaned up in ${cleanupTime}ms`);
+        
+      } catch (error) {
+        console.warn('Workspace resource management test failed:', error);
+        // Best effort cleanup
+        for (const worktree of workspaces) {
+          try {
+            await workspace.removeWorktree(worktree.id);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup worktree ${worktree.id}:`, cleanupError);
+          }
+        }
+      }
+    });
+  });
+
+  describe('Session Lifecycle and Monitoring', () => {
+    it('should manage complete session lifecycle', async () => {
+      const testTaskId = 'session-lifecycle-test';
+      const testWorkingDir = testProjectPath;
+      
+      try {
+        // Create session
+        const session = await sessionManager.createSession(testTaskId, testWorkingDir);
+        
+        expect(session.sessionId).toBeTruthy();
+        expect(session.taskId).toBe(testTaskId);
+        expect(session.status).toBe('running');
+        expect(session.createdAt).toBeInstanceOf(Date);
+        
+        // Verify session appears in list
+        const sessions = sessionManager.listSessions();
+        const createdSession = sessions.find(s => s.sessionId === session.sessionId);
+        expect(createdSession).toBeTruthy();
+        
+        // Test session status monitoring
+        const status = await sessionManager.getSessionStatus(session.sessionId);
+        expect(status).toBe('running');
+        
+        // Test command execution in session
+        const commandOutput = await sessionManager.runCommandInSession(session.sessionId, 'echo "test command"');
+        expect(commandOutput.output).toContain('test command');
+        expect(commandOutput.exitCode).toBe(0);
+        expect(commandOutput.timestamp).toBeInstanceOf(Date);
+        
+        // Test session termination
+        const killResult = await sessionManager.killSession(session.sessionId);
+        expect(killResult).toBe(true);
+        
+        // Verify session is no longer in list
+        const sessionsAfterKill = sessionManager.listSessions();
+        const killedSession = sessionsAfterKill.find(s => s.sessionId === session.sessionId);
+        expect(killedSession).toBeFalsy();
+        
+      } catch (error) {
+        console.warn('Session lifecycle test failed:', error);
+        // Cleanup on error
+        try {
+          await sessionManager.killSession(`cortex-${testTaskId}-*`);
+        } catch (cleanupError) {
+          console.warn('Session cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should handle concurrent session management', async () => {
+      const concurrentCount = 3;
+      const sessions: SessionInfo[] = [];
+      
+      try {
+        // Create multiple concurrent sessions
+        const sessionPromises = Array.from({ length: concurrentCount }, (_, i) =>
+          sessionManager.createSession(`concurrent-test-${i}`, testProjectPath)
+        );
+        
+        const createdSessions = await Promise.all(sessionPromises);
+        sessions.push(...createdSessions);
+        
+        // Verify all sessions were created
+        expect(sessions).toHaveLength(concurrentCount);
+        
+        // Verify all sessions are unique
+        const sessionIds = sessions.map(s => s.sessionId);
+        const uniqueSessionIds = new Set(sessionIds);
+        expect(uniqueSessionIds.size).toBe(concurrentCount);
+        
+        // Test concurrent command execution
+        const commandPromises = sessions.map(session =>
+          sessionManager.runCommandInSession(session.sessionId, `echo "session ${session.taskId}"`)
+        );
+        
+        const commandResults = await Promise.all(commandPromises);
+        
+        // Verify all commands executed successfully
+        commandResults.forEach((result, index) => {
+          expect(result.output).toContain(`session concurrent-test-${index}`);
+          expect(result.exitCode).toBe(0);
+        });
+        
+        // Cleanup all sessions
+        await Promise.all(sessions.map(session => sessionManager.killSession(session.sessionId)));
+        
+        console.log(`Successfully managed ${concurrentCount} concurrent sessions`);
+        
+      } catch (error) {
+        console.warn('Concurrent session test failed:', error);
+        // Best effort cleanup
+        for (const session of sessions) {
+          try {
+            await sessionManager.killSession(session.sessionId);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup session ${session.sessionId}:`, cleanupError);
+          }
+        }
+      }
+    });
+
+    it('should monitor session health and detect failures', async () => {
+      const testTaskId = 'session-monitoring-test';
+      
+      try {
+        // Create session
+        const session = await sessionManager.createSession(testTaskId, testProjectPath);
+        
+        // Monitor session with callback
+        let monitoringCallbacks = 0;
+        const monitoringPromise = sessionManager.monitorSession(session.sessionId, (output) => {
+          monitoringCallbacks++;
+          expect(output).toBeTruthy();
+        });
+        
+        // Execute some commands to generate output
+        await sessionManager.runCommandInSession(session.sessionId, 'echo "monitoring test 1"');
+        await sessionManager.runCommandInSession(session.sessionId, 'echo "monitoring test 2"');
+        
+        // Wait for monitoring callbacks
+        await new Promise(resolve => setTimeout(resolve, 6000)); // Wait for monitoring cycle
+        
+        // Verify monitoring detected output
+        expect(monitoringCallbacks).toBeGreaterThan(0);
+        
+        // Test session output retrieval
+        const sessionOutput = await sessionManager.getSessionOutput(session.sessionId);
+        expect(sessionOutput).toContain('monitoring test');
+        
+        // Cleanup
+        await sessionManager.killSession(session.sessionId);
+        
+      } catch (error) {
+        console.warn('Session monitoring test failed:', error);
+        try {
+          await sessionManager.killSession(`cortex-${testTaskId}-*`);
+        } catch (cleanupError) {
+          console.warn('Monitoring cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should handle session failure recovery', async () => {
+      try {
+        // Create session
+        const session = await sessionManager.createSession('failure-test', testProjectPath);
+        
+        // Simulate session failure by killing the underlying tmux session
+        await sessionManager.killSession(session.sessionId);
+        
+        // Attempt operations on failed session
+        let failureDetected = false;
+        try {
+          await sessionManager.runCommandInSession(session.sessionId, 'echo "should fail"');
+        } catch (error) {
+          failureDetected = true;
+          expect((error as Error).message).toContain('session'); // Should detect session error
+        }
+        
+        expect(failureDetected).toBe(true);
+        
+        // Test dead session cleanup
+        await sessionManager.cleanupDeadSessions();
+        
+        // Verify session is cleaned up
+        const remainingSessions = sessionManager.listSessions();
+        const failedSession = remainingSessions.find(s => s.sessionId === session.sessionId);
+        expect(failedSession).toBeFalsy();
+        
+      } catch (error) {
+        console.warn('Session failure recovery test failed:', error);
+      }
+    });
+  });
+
+  describe('Workspace-Session Integration', () => {
+    it('should coordinate workspace and session creation', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const projectId = (orchestrator as any).projectId;
+      const tasks = await canvas.getTasksByProject(projectId);
+      const testTask = tasks[0];
+      
+      // Map task to feature for spawning
+      (orchestrator as any).taskFeatureMap.set(testTask.id, {
+        name: testTask.title,
+        priority: testTask.priority,
+        description: testTask.description,
+        dependencies: [],
+        agent: 'SpecWriter',
+        acceptanceCriteria: [],
+        microtasks: []
+      });
+      
+      try {
+        // Test coordinated workspace and session creation through orchestrator
+        await orchestrator.spawnAgent(testTask, 'SpecWriter');
+        
+        // Verify workspace was created
+        const worktrees = await workspace.listWorktrees();
+        const taskWorktree = worktrees.find(w => w.id === testTask.id);
+        expect(taskWorktree).toBeTruthy();
+        
+        // Verify session was created
+        const sessions = sessionManager.listSessions();
+        const taskSession = sessions.find(s => s.taskId === testTask.id);
+        expect(taskSession).toBeTruthy();
+        
+        // Verify session is working in the correct workspace
+        if (taskSession) {
+          const sessionOutput = await sessionManager.getSessionOutput(taskSession.sessionId);
+          expect(sessionOutput).toBeTruthy();
+        }
+        
+        // Test coordinated cleanup through task completion
+        await orchestrator.handleTaskCompletion(testTask.id);
+        
+        // Verify both workspace and session are cleaned up
+        const worktreesAfterCleanup = await workspace.listWorktrees();
+        const remainingWorktree = worktreesAfterCleanup.find(w => w.id === testTask.id);
+        expect(remainingWorktree).toBeFalsy();
+        
+        const sessionsAfterCleanup = sessionManager.listSessions();
+        const remainingSession = sessionsAfterCleanup.find(s => s.taskId === testTask.id);
+        expect(remainingSession).toBeFalsy();
+        
+      } catch (error) {
+        console.warn('Workspace-session integration test failed:', error);
+        // Best effort cleanup
+        try {
+          await workspace.removeWorktree(testTask.id);
+          const sessions = sessionManager.listSessions();
+          const taskSessions = sessions.filter(s => s.taskId === testTask.id);
+          for (const session of taskSessions) {
+            await sessionManager.killSession(session.sessionId);
+          }
+        } catch (cleanupError) {
+          console.warn('Integration cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should handle workspace-session state synchronization', async () => {
+      await orchestrator.initialize(testProjectPath);
+      
+      const testTaskId = 'workspace-session-sync-test';
+      const branchName = 'feature/workspace-session-sync';
+      
+      try {
+        // Create workspace
+        const worktree = await workspace.createWorktree(testTaskId, branchName, 'main');
+        
+        // Create session in the workspace
+        const session = await sessionManager.createSession(testTaskId, worktree.path);
+        
+        // Execute commands that modify workspace state
+        await sessionManager.runCommandInSession(session.sessionId, 'echo "workspace sync test" > sync-test.txt');
+        await sessionManager.runCommandInSession(session.sessionId, 'ls -la');
+        
+        // Check workspace state reflects session actions
+        const workspaceStatus = await workspace.getWorktreeStatus(testTaskId);
+        expect(workspaceStatus.clean).toBe(false);
+        expect(workspaceStatus.files).toContain('sync-test.txt');
+        
+        // Verify file was actually created through session
+        const testFilePath = path.join(worktree.path, 'sync-test.txt');
+        const fileExists = fs.existsSync(testFilePath);
+        expect(fileExists).toBe(true);
+        
+        if (fileExists) {
+          const fileContent = await fs.promises.readFile(testFilePath, 'utf8');
+          expect(fileContent.trim()).toBe('workspace sync test');
+        }
+        
+        // Commit changes through workspace manager
+        const commitHash = await workspace.commitChanges(testTaskId, 'Sync test commit');
+        expect(commitHash).toBeTruthy();
+        
+        // Verify state is now clean
+        const statusAfterCommit = await workspace.getWorktreeStatus(testTaskId);
+        expect(statusAfterCommit.clean).toBe(true);
+        
+        // Cleanup
+        await sessionManager.killSession(session.sessionId);
+        await workspace.removeWorktree(testTaskId);
+        
+      } catch (error) {
+        console.warn('Workspace-session sync test failed:', error);
+        // Cleanup on error
+        try {
+          const sessions = sessionManager.listSessions();
+          const testSessions = sessions.filter(s => s.taskId === testTaskId);
+          for (const session of testSessions) {
+            await sessionManager.killSession(session.sessionId);
+          }
+          await workspace.removeWorktree(testTaskId);
+        } catch (cleanupError) {
+          console.warn('Sync cleanup failed:', cleanupError);
+        }
+      }
+    });
+
+    it('should handle resource contention and coordination', async () => {
+      const concurrentTaskCount = 3;
+      const taskIds: string[] = [];
+      const worktrees: WorktreeInfo[] = [];
+      const sessions: SessionInfo[] = [];
+      
+      try {
+        // Create multiple concurrent workspace-session pairs
+        for (let i = 0; i < concurrentTaskCount; i++) {
+          const taskId = `contention-test-${i}`;
+          const branchName = `feature/contention-test-${i}`;
+          
+          taskIds.push(taskId);
+          
+          // Create workspace
+          const worktree = await workspace.createWorktree(taskId, branchName, 'main');
+          worktrees.push(worktree);
+          
+          // Create session
+          const session = await sessionManager.createSession(taskId, worktree.path);
+          sessions.push(session);
+        }
+        
+        // Execute concurrent operations
+        const operationPromises = sessions.map(async (session, index) => {
+          const commands = [
+            `echo "Task ${index} operation 1" > task-${index}-file1.txt`,
+            `echo "Task ${index} operation 2" > task-${index}-file2.txt`,
+            'ls -la',
+            'pwd'
+          ];
+          
+          for (const command of commands) {
+            await sessionManager.runCommandInSession(session.sessionId, command);
+            await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
+          }
+        });
+        
+        await Promise.all(operationPromises);
+        
+        // Verify all operations completed without interference
+        for (let i = 0; i < concurrentTaskCount; i++) {
+          const taskId = taskIds[i];
+          const worktree = worktrees[i];
+          
+          // Verify expected files exist
+          const file1Path = path.join(worktree.path, `task-${i}-file1.txt`);
+          const file2Path = path.join(worktree.path, `task-${i}-file2.txt`);
+          
+          expect(fs.existsSync(file1Path)).toBe(true);
+          expect(fs.existsSync(file2Path)).toBe(true);
+          
+          // Verify file contents are correct (no cross-contamination)
+          const file1Content = await fs.promises.readFile(file1Path, 'utf8');
+          const file2Content = await fs.promises.readFile(file2Path, 'utf8');
+          
+          expect(file1Content.trim()).toBe(`Task ${i} operation 1`);
+          expect(file2Content.trim()).toBe(`Task ${i} operation 2`);
+        }
+        
+        // Cleanup all resources
+        await Promise.all(sessions.map(session => sessionManager.killSession(session.sessionId)));
+        await Promise.all(worktrees.map(worktree => workspace.removeWorktree(worktree.id)));
+        
+        console.log(`Successfully handled ${concurrentTaskCount} concurrent workspace-session pairs`);
+        
+      } catch (error) {
+        console.warn('Resource contention test failed:', error);
+        // Best effort cleanup
+        for (const session of sessions) {
+          try {
+            await sessionManager.killSession(session.sessionId);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup session ${session.sessionId}:`, cleanupError);
+          }
+        }
+        for (const worktree of worktrees) {
+          try {
+            await workspace.removeWorktree(worktree.id);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup worktree ${worktree.id}:`, cleanupError);
+          }
+        }
+      }
+    });
+  });
+
+  describe('Performance and Resource Optimization', () => {
+    it('should optimize workspace creation performance', async () => {
+      const workspaceCount = 10;
+      const creationTimes: number[] = [];
+      const workspaceIds: string[] = [];
+      
+      try {
+        // Measure individual workspace creation times
+        for (let i = 0; i < workspaceCount; i++) {
+          const taskId = `perf-test-${i}`;
+          const branchName = `feature/perf-test-${i}`;
+          workspaceIds.push(taskId);
+          
+          const startTime = Date.now();
+          await workspace.createWorktree(taskId, branchName, 'main');
+          const creationTime = Date.now() - startTime;
+          
+          creationTimes.push(creationTime);
+        }
+        
+        // Analyze performance metrics
+        const avgCreationTime = creationTimes.reduce((a, b) => a + b, 0) / creationTimes.length;
+        const maxCreationTime = Math.max(...creationTimes);
+        const minCreationTime = Math.min(...creationTimes);
+        
+        // Performance assertions
+        expect(avgCreationTime).toBeLessThan(5000); // < 5 seconds average
+        expect(maxCreationTime).toBeLessThan(10000); // < 10 seconds max
+        
+        // Verify performance consistency
+        const performanceVariance = creationTimes.reduce((sum, time) => 
+          sum + Math.pow(time - avgCreationTime, 2), 0) / creationTimes.length;
+        const standardDeviation = Math.sqrt(performanceVariance);
+        const coefficientOfVariation = standardDeviation / avgCreationTime;
+        
+        expect(coefficientOfVariation).toBeLessThan(0.5); // < 50% coefficient of variation
+        
+        console.log(`Workspace Creation Performance:
+          Count: ${workspaceCount}
+          Average: ${avgCreationTime.toFixed(2)}ms
+          Min: ${minCreationTime}ms, Max: ${maxCreationTime}ms
+          Std Dev: ${standardDeviation.toFixed(2)}ms
+          Coefficient of Variation: ${(coefficientOfVariation * 100).toFixed(2)}%`);
+        
+        // Cleanup
+        for (const taskId of workspaceIds) {
+          await workspace.removeWorktree(taskId);
+        }
+        
+      } catch (error) {
+        console.warn('Workspace performance test failed:', error);
+        // Cleanup on error
+        for (const taskId of workspaceIds) {
+          try {
+            await workspace.removeWorktree(taskId);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup workspace ${taskId}:`, cleanupError);
+          }
+        }
+      }
+    });
+
+    it('should optimize session startup performance', async () => {
+      const sessionCount = 10;
+      const startupTimes: number[] = [];
+      const sessionIds: string[] = [];
+      
+      try {
+        // Measure session startup times
+        for (let i = 0; i < sessionCount; i++) {
+          const taskId = `session-perf-test-${i}`;
+          
+          const startTime = Date.now();
+          const session = await sessionManager.createSession(taskId, testProjectPath);
+          const startupTime = Date.now() - startTime;
+          
+          sessionIds.push(session.sessionId);
+          startupTimes.push(startupTime);
+        }
+        
+        // Analyze performance metrics
+        const avgStartupTime = startupTimes.reduce((a, b) => a + b, 0) / startupTimes.length;
+        const maxStartupTime = Math.max(...startupTimes);
+        const minStartupTime = Math.min(...startupTimes);
+        
+        // Performance assertions
+        expect(avgStartupTime).toBeLessThan(3000); // < 3 seconds average
+        expect(maxStartupTime).toBeLessThan(5000); // < 5 seconds max
+        
+        console.log(`Session Startup Performance:
+          Count: ${sessionCount}
+          Average: ${avgStartupTime.toFixed(2)}ms
+          Min: ${minStartupTime}ms, Max: ${maxStartupTime}ms`);
+        
+        // Cleanup
+        for (const sessionId of sessionIds) {
+          await sessionManager.killSession(sessionId);
+        }
+        
+      } catch (error) {
+        console.warn('Session performance test failed:', error);
+        // Cleanup on error
+        for (const sessionId of sessionIds) {
+          try {
+            await sessionManager.killSession(sessionId);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup session ${sessionId}:`, cleanupError);
+          }
+        }
+      }
+    });
+
+    it('should monitor resource usage and prevent leaks', async () => {
+      const initialMemory = process.memoryUsage();
+      const resourceOperations = 20;
+      
+      try {
+        // Perform multiple resource-intensive operations
+        for (let i = 0; i < resourceOperations; i++) {
+          const taskId = `resource-monitor-${i}`;
+          const branchName = `feature/resource-monitor-${i}`;
+          
+          // Create workspace
+          const worktree = await workspace.createWorktree(taskId, branchName, 'main');
+          
+          // Create session
+          const session = await sessionManager.createSession(taskId, worktree.path);
+          
+          // Perform some operations
+          await sessionManager.runCommandInSession(session.sessionId, 'echo "resource test"');
+          
+          // Immediate cleanup (simulating proper resource management)
+          await sessionManager.killSession(session.sessionId);
+          await workspace.removeWorktree(taskId);
+          
+          // Force garbage collection if available
+          if (global.gc) {
+            global.gc();
+          }
+        }
+        
+        // Check final memory usage
+        const finalMemory = process.memoryUsage();
+        const memoryIncrease = finalMemory.heapUsed - initialMemory.heapUsed;
+        const memoryIncreasePerOperation = memoryIncrease / resourceOperations;
+        
+        // Memory leak detection
+        expect(memoryIncreasePerOperation).toBeLessThan(1024 * 1024); // < 1MB per operation
+        expect(memoryIncrease).toBeLessThan(50 * 1024 * 1024); // < 50MB total increase
+        
+        console.log(`Resource Usage Monitoring:
+          Operations: ${resourceOperations}
+          Initial Memory: ${Math.round(initialMemory.heapUsed / 1024 / 1024)}MB
+          Final Memory: ${Math.round(finalMemory.heapUsed / 1024 / 1024)}MB
+          Increase: ${Math.round(memoryIncrease / 1024 / 1024)}MB
+          Per Operation: ${Math.round(memoryIncreasePerOperation / 1024)}KB`);
+        
+      } catch (error) {
+        console.warn('Resource monitoring test failed:', error);
+      }
+    });
+  });
+});

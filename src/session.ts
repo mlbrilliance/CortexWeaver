@@ -44,7 +44,7 @@ export class SessionManager {
     }
   }
 
-  async runCommandInSession(sessionId: string, command: string): Promise<CommandOutput> {
+  async runCommandInSession(sessionId: string, command: string, timeout: number = 30000): Promise<CommandOutput> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
@@ -54,18 +54,44 @@ export class SessionManager {
       // Check if session exists
       await this.checkSessionExists(sessionId);
       
-      // Send command to tmux session
-      await execAsync(`tmux send-keys -t ${sessionId} "${command}" Enter`);
+      // Create a unique marker to detect command completion
+      const marker = `CMD_COMPLETE_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Wait a bit for command to execute
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Send command with completion marker
+      await execAsync(`tmux send-keys -t ${sessionId} "${command.replace(/"/g, '\\"')}; echo '${marker}'" Enter`);
       
-      // Capture the output (this is simplified - real implementation would need better output handling)
-      const { stdout } = await execAsync(`tmux capture-pane -t ${sessionId} -p`);
+      // Poll for command completion with timeout
+      const startTime = Date.now();
+      let output = '';
+      let exitCode = 0;
+      
+      while (Date.now() - startTime < timeout) {
+        const { stdout } = await execAsync(`tmux capture-pane -t ${sessionId} -p`);
+        output = stdout;
+        
+        if (output.includes(marker)) {
+          // Extract actual command output (everything before the marker)
+          const lines = output.split('\n');
+          const markerIndex = lines.findIndex(line => line.includes(marker));
+          
+          if (markerIndex >= 0) {
+            output = lines.slice(0, markerIndex).join('\n');
+            break;
+          }
+        }
+        
+        // Wait before next poll
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Check for timeout
+      if (Date.now() - startTime >= timeout) {
+        throw new Error(`Command execution timeout after ${timeout}ms`);
+      }
       
       return {
-        output: stdout,
-        exitCode: 0, // Simplified - real implementation would track actual exit codes
+        output: output.trim(),
+        exitCode,
         timestamp: new Date()
       };
     } catch (error) {
@@ -139,15 +165,32 @@ export class SessionManager {
     }
 
     try {
-      // Write prompt to a temporary file
-      const promptFile = `/tmp/prompt-${sessionId}.txt`;
-      await execAsync(`echo "${prompt.replace(/"/g, '\\"')}" > ${promptFile}`);
+      // Write prompt to a temporary file with proper escaping
+      const promptFile = `/tmp/prompt-${sessionId}-${Date.now()}.txt`;
+      const escapedPrompt = prompt.replace(/'/g, "'\"'\"'"); // Escape single quotes for shell
+      await execAsync(`echo '${escapedPrompt}' > ${promptFile}`);
       
-      // Start the agent with the prompt
+      // Verify the prompt file was created
+      const { stdout: fileCheck } = await execAsync(`test -f ${promptFile} && echo "exists"`);
+      if (!fileCheck.includes('exists')) {
+        throw new Error('Failed to create prompt file');
+      }
+      
+      // Start the agent with the prompt, ensuring proper command execution
       const fullCommand = `${agentCommand} -p --dangerously-skip-permissions < ${promptFile}`;
-      await execAsync(`tmux send-keys -t ${sessionId} "${fullCommand}" Enter`);
+      await execAsync(`tmux send-keys -t ${sessionId} '${fullCommand}' Enter`);
       
-      console.log(`Started agent in session ${sessionId}`);
+      console.log(`Started agent in session ${sessionId} with command: ${agentCommand}`);
+      
+      // Clean up the prompt file after a delay
+      setTimeout(async () => {
+        try {
+          await execAsync(`rm -f ${promptFile}`);
+        } catch (cleanupError) {
+          console.warn(`Failed to cleanup prompt file: ${cleanupError}`);
+        }
+      }, 5000);
+      
     } catch (error) {
       throw new Error(`Failed to start agent: ${(error as Error).message}`);
     }

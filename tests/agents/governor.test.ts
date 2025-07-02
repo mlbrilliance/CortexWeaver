@@ -564,6 +564,382 @@ describe('GovernorAgent', () => {
     });
   });
 
+  describe('V3.0 Reflector Spawning', () => {
+    beforeEach(async () => {
+      await governor.initialize(mockConfig);
+    });
+
+    it('should analyze and request Reflector spawn for quality issues', async () => {
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Monitor project with quality issues',
+        status: 'assigned',
+        priority: 'high',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      // Mock low quality data
+      mockCognitiveCanvas.getTasksByProject.mockResolvedValue([
+        {
+          id: 'task-1',
+          title: 'Failed task',
+          description: 'Task with critical quality issues',
+          status: 'completed',
+          priority: 'medium',
+          projectId: 'project-1',
+          createdAt: new Date().toISOString(),
+          metadata: { testResults: { passed: 2, failed: 8 } }
+        } as any
+      ]);
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'reflector_request',
+          context: 'system_reflection_needed',
+          metadata: expect.objectContaining({
+            priority: 'high',
+            triggers: expect.arrayContaining(['quality_critical'])
+          })
+        })
+      );
+    });
+
+    it('should handle budget violation triggers for Reflector spawn', async () => {
+      mockClaudeClient.getTokenUsage.mockReturnValue({
+        totalInputTokens: 30000,
+        totalOutputTokens: 30000,
+        totalTokens: 60000, // Over limit
+        requestCount: 100,
+        estimatedCost: 600 // Over limit
+      });
+
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Monitor budget violations',
+        status: 'assigned',
+        priority: 'high',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'reflector_request',
+          metadata: expect.objectContaining({
+            triggers: expect.arrayContaining(['budget_violation'])
+          })
+        })
+      );
+    });
+
+    it('should adjust spawn intervals based on priority', async () => {
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test interval adjustment',
+        status: 'assigned',
+        priority: 'high',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      // Mock critical conditions
+      mockCognitiveCanvas.getTasksByProject.mockResolvedValue([
+        {
+          id: 'task-1',
+          title: 'Critical failure',
+          description: 'Critical system failure',
+          status: 'completed',
+          priority: 'high',
+          projectId: 'project-1',
+          createdAt: new Date().toISOString(),
+          metadata: { testResults: { passed: 1, failed: 9 } }
+        } as any
+      ]);
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      const pheromoneCall = mockCognitiveCanvas.createPheromone.mock.calls
+        .find(call => call[0].type === 'reflector_request');
+      
+      expect(pheromoneCall[0].metadata.nextRecommendedSpawn).toBeDefined();
+      expect(pheromoneCall[0].metadata.priority).toBe('high');
+    });
+  });
+
+  describe('V3.0 Prompt Update Management', () => {
+    beforeEach(async () => {
+      await governor.initialize(mockConfig);
+      
+      // Mock file system operations
+      const fs = require('fs');
+      fs.existsSync.mockReturnValue(true);
+      fs.readFileSync.mockReturnValue('original prompt content');
+      fs.writeFileSync.mockImplementation(() => {});
+    });
+
+    it('should process Reflector improvement proposals', async () => {
+      // Mock improvement proposal pheromone
+      mockCognitiveCanvas.getPheromonesByType.mockResolvedValue([
+        {
+          id: 'proposal-1',
+          type: 'guide_pheromone',
+          context: 'improvement_proposal',
+          metadata: {
+            agentId: 'reflector-1',
+            proposals: [
+              {
+                file: '/test/prompts/governor.md',
+                diff: '+ Improved instruction line',
+                rationale: 'This improvement enhances clarity and effectiveness based on performance analysis',
+                priority: 'high'
+              }
+            ]
+          },
+          strength: 0.8,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 3600000).toISOString()
+        }
+      ]);
+
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Process prompt improvements',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      
+      // Verify audit trail was created
+      const audits = governor.getPromptUpdateAudits();
+      expect(audits.length).toBeGreaterThan(0);
+      expect(audits[0].status).toBe('applied');
+      expect(audits[0].reflectorProposal).toBeDefined();
+    });
+
+    it('should reject proposals with insufficient rationale', async () => {
+      mockCognitiveCanvas.getPheromonesByType.mockResolvedValue([
+        {
+          id: 'proposal-2',
+          type: 'guide_pheromone',
+          context: 'improvement_proposal',
+          metadata: {
+            agentId: 'reflector-1',
+            proposals: [
+              {
+                file: '/test/prompts/governor.md',
+                diff: '+ Minor change',
+                rationale: 'Short', // Too short
+                priority: 'low'
+              }
+            ]
+          },
+          strength: 0.5,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 3600000).toISOString()
+        }
+      ]);
+
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test proposal rejection',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      
+      const audits = governor.getPromptUpdateAudits();
+      expect(audits.length).toBeGreaterThan(0);
+      expect(audits[0].status).toBe('rejected');
+      expect(audits[0].reason).toContain('Insufficient rationale');
+    });
+
+    it('should handle proposal processing errors gracefully', async () => {
+      const fs = require('fs');
+      fs.readFileSync.mockImplementation(() => {
+        throw new Error('File read error');
+      });
+
+      mockCognitiveCanvas.getPheromonesByType.mockResolvedValue([
+        {
+          id: 'proposal-3',
+          type: 'guide_pheromone',
+          context: 'improvement_proposal',
+          metadata: {
+            agentId: 'reflector-1',
+            proposals: [
+              {
+                file: '/test/prompts/governor.md',
+                diff: '+ Good improvement',
+                rationale: 'This is a well-reasoned improvement with detailed explanation',
+                priority: 'medium'
+              }
+            ]
+          },
+          strength: 0.7,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 3600000).toISOString()
+        }
+      ]);
+
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test error handling',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      // Should not fail the entire execution
+      expect(result.success).toBe(true);
+      
+      // Should create warning pheromone
+      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'warn_pheromone',
+          context: 'prompt_update_failure'
+        })
+      );
+    });
+  });
+
+  describe('V3.0 Enhanced Cost Analytics', () => {
+    beforeEach(async () => {
+      await governor.initialize(mockConfig);
+    });
+
+    it('should provide enhanced cost analytics with V3.0 features', async () => {
+      mockClaudeClient.getTokenUsage.mockReturnValue({
+        totalInputTokens: 500,
+        totalOutputTokens: 500,
+        totalTokens: 1000,
+        requestCount: 10,
+        estimatedCost: 15
+      });
+
+      mockCognitiveCanvas.getTasksByProject.mockResolvedValue([
+        {
+          id: 'task-1',
+          title: 'Completed task',
+          status: 'completed',
+          metadata: { agentType: 'coder' }
+        },
+        {
+          id: 'task-2',
+          title: 'Another completed task',
+          status: 'completed',
+          metadata: { agentType: 'tester' }
+        }
+      ] as any);
+
+      const costData = await governor.monitorCosts();
+      
+      expect(costData.totalTokens).toBe(1000);
+      expect(costData.totalCost).toBe(15);
+      expect(costData.hourlyRate).toBeDefined();
+      expect(costData.dailyProjection).toBeDefined();
+      expect(costData.costByAgent).toBeDefined();
+      expect(costData.efficiency).toBeDefined();
+      expect(costData.costTrend).toBeDefined();
+    });
+
+    it('should calculate efficiency metrics correctly', async () => {
+      mockCognitiveCanvas.getTasksByProject.mockResolvedValue([
+        { id: 'task-1', status: 'completed', metadata: { agentType: 'coder' } },
+        { id: 'task-2', status: 'completed', metadata: { agentType: 'coder' } },
+        { id: 'task-3', status: 'failed', metadata: { agentType: 'tester' } }
+      ] as any);
+
+      const costData = await governor.monitorCosts();
+      
+      expect(costData.efficiency).toBeDefined();
+      expect(costData.efficiency!.tokensPerTask).toBeGreaterThan(0);
+      expect(costData.efficiency!.costPerTask).toBeGreaterThan(0);
+      expect(costData.efficiency!.successRateImpact).toBeLessThan(1); // Should be reduced due to failure
+    });
+  });
+
+  describe('V3.0 Integration and Metadata', () => {
+    beforeEach(async () => {
+      await governor.initialize(mockConfig);
+    });
+
+    it('should include V3.0 metadata in execution results', async () => {
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test V3.0 metadata',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      expect((result.result as any).v3Metadata).toBeDefined();
+      expect((result.result as any).v3Metadata.version).toBe('3.0');
+      expect((result.result as any).v3Metadata.reflectorSpawnAnalysis).toBeDefined();
+      expect((result.result as any).v3Metadata.personaLoaderActive).toBe(true);
+    });
+
+    it('should maintain backward compatibility with existing functionality', async () => {
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test backward compatibility',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      expect(result.success).toBe(true);
+      expect(result.result.costMonitoring).toBeDefined();
+      expect(result.result.budgetEnforcement).toBeDefined();
+      expect(result.result.qualityAnalysis).toBeDefined();
+      expect(result.result.pheromones).toBeDefined();
+      expect(result.result.improvements).toBeDefined();
+    });
+  });
+
   describe('Edge Cases', () => {
     beforeEach(async () => {
       await governor.initialize(mockConfig);
@@ -612,6 +988,31 @@ describe('GovernorAgent', () => {
       };
 
       await expect(governor.initialize(mockConfigBroken)).rejects.toThrow('Workspace root is required');
+    });
+
+    it('should handle PersonaLoader failures gracefully', async () => {
+      // Mock PersonaLoader to throw error
+      const { PersonaLoader } = require('../../src/persona');
+      PersonaLoader.mockImplementation(() => {
+        throw new Error('PersonaLoader initialization failed');
+      });
+
+      const task = {
+        id: 'task-1',
+        title: 'Governor oversight',
+        description: 'Test PersonaLoader error handling',
+        status: 'assigned',
+        priority: 'medium',
+        projectId: 'project-1',
+        createdAt: new Date().toISOString()
+      };
+
+      await governor.receiveTask(task, {});
+      const result = await governor.run();
+      
+      // Should still complete successfully with fallback
+      expect(result.success).toBe(true);
+      expect((result.result as any).v3Metadata.personaLoaderActive).toBe(false);
     });
   });
 });

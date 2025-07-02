@@ -1,425 +1,243 @@
-import { GuideAgent } from '../../src/agents/guide';
-import { ClaudeClient, ClaudeModel } from '../../src/claude-client';
-import { WorkspaceManager } from '../../src/workspace';
-import { CognitiveCanvas } from '../../src/cognitive-canvas';
-import { SessionManager } from '../../src/session';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Guide, GuideRecommendation, LearningPath } from '../../src/agents/guide';
+import { AgentConfig, TaskContext, TaskData } from '../../src/agent';
+import { ClaudeModel } from '../../src/claude-client';
+import { setupMocks, createMockAgentConfig, createMockTask, createMockContext, suppressConsoleWarnings } from '../test-utils';
 
-// Mock dependencies
-jest.mock('../../src/claude-client');
-jest.mock('../../src/workspace');
-jest.mock('../../src/cognitive-canvas');
-jest.mock('../../src/session');
-jest.mock('@google/generative-ai');
-jest.mock('fs');
+describe('Guide', () => {
+  let guide: Guide;
+  let mockConfig: AgentConfig;
+  let mockTask: TaskData;
+  let mockContext: TaskContext;
 
-describe('GuideAgent', () => {
-  let guide: GuideAgent;
-  let mockClaudeClient: jest.Mocked<ClaudeClient>;
-  let mockWorkspace: jest.Mocked<WorkspaceManager>;
-  let mockCognitiveCanvas: jest.Mocked<CognitiveCanvas>;
-  let mockSessionManager: jest.Mocked<SessionManager>;
-  let mockGeminiClient: jest.Mocked<GoogleGenerativeAI>;
-  let mockGeminiModel: any;
-
-  const mockConfig = {
-    id: 'guide-1',
-    role: 'guide',
-    capabilities: ['user-guidance', 'explanation', 'tutorial-creation', 'documentation'],
-    claudeConfig: {
-      apiKey: 'test-api-key',
-      defaultModel: ClaudeModel.SONNET,
-      maxTokens: 4000,
-      temperature: 0.7
-    },
-    workspaceRoot: '/test/workspace',
-    cognitiveCanvasConfig: {
-      uri: 'bolt://localhost:7687',
-      username: 'neo4j',
-      password: 'test'
-    }
-  };
-
-  const mockTask = {
-    id: 'task-1',
-    title: 'Create User Guide',
-    description: 'Create comprehensive user guide for new feature',
-    projectId: 'project-1',
-    status: 'assigned',
-    priority: 'medium',
-    dependencies: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
-
-  const mockContext = {
-    projectInfo: {
-      name: 'Test Project',
-      language: 'typescript',
-      framework: 'react'
-    },
-    dependencies: ['react', 'typescript'],
-    files: ['src/App.tsx', 'src/components/Button.tsx']
-  };
+  setupMocks();
+  suppressConsoleWarnings();
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    process.env.GEMINI_API_KEY = 'test-gemini-key';
+    mockConfig = createMockAgentConfig(
+      'guide-1',
+      'guide',
+      ['guidance', 'mentoring', 'best-practices', 'learning-paths']
+    );
 
-    // Mock Gemini model
-    mockGeminiModel = {
-      generateContent: jest.fn().mockResolvedValue({
-        response: {
-          text: () => 'Generated guide content with step-by-step instructions'
-        }
-      })
+    mockTask = createMockTask(
+      'guide-task-1',
+      'Provide development guidance',
+      'Help developers with best practices and learning paths'
+    );
+    (mockTask as any).metadata = {
+      projectType: 'web-application',
+      techStack: ['typescript', 'react', 'node.js'],
+      experience: 'intermediate'
     };
 
-    // Mock Gemini client
-    mockGeminiClient = {
-      getGenerativeModel: jest.fn().mockReturnValue(mockGeminiModel)
-    } as any;
+    mockContext = createMockContext({
+      projectType: 'web-application',
+      techStack: ['typescript', 'react', 'node.js'],
+      currentPhase: 'development',
+      experience: 'intermediate',
+      goals: ['improve testing', 'optimize performance']
+    });
 
-    (GoogleGenerativeAI as jest.MockedClass<typeof GoogleGenerativeAI>).mockImplementation(() => mockGeminiClient);
-
-    // Mock Claude client
-    mockClaudeClient = {
-      sendMessage: jest.fn().mockResolvedValue({
-        content: 'Guide analysis complete',
-        tokenUsage: { inputTokens: 200, outputTokens: 100, totalTokens: 300 },
-        model: 'claude-3-sonnet-20240229'
-      }),
-      getConfiguration: jest.fn(),
-      updateConfiguration: jest.fn(),
-      sendMessageStream: jest.fn(),
-      getTokenUsage: jest.fn(),
-      resetTokenUsage: jest.fn(),
-      setDefaultModel: jest.fn(),
-      getAvailableModels: jest.fn()
-    } as any;
-
-    (ClaudeClient as jest.MockedClass<typeof ClaudeClient>).mockImplementation(() => mockClaudeClient);
-
-    // Mock workspace
-    mockWorkspace = {
-      executeCommand: jest.fn().mockResolvedValue({
-        stdout: 'Command executed successfully',
-        stderr: '',
-        exitCode: 0
-      }),
-      getWorktreePath: jest.fn().mockReturnValue('/test/workspace/task-1'),
-      getProjectRoot: jest.fn().mockReturnValue('/test/workspace'),
-      createWorktree: jest.fn(),
-      removeWorktree: jest.fn(),
-      listWorktrees: jest.fn(),
-      commitChanges: jest.fn(),
-      mergeToBranch: jest.fn(),
-      getWorktreeStatus: jest.fn()
-    } as any;
-
-    (WorkspaceManager as jest.MockedClass<typeof WorkspaceManager>).mockImplementation(() => mockWorkspace);
-
-    // Mock cognitive canvas
-    mockCognitiveCanvas = {
-      createPheromone: jest.fn().mockResolvedValue({
-        id: 'pheromone-1',
-        type: 'guide',
-        strength: 0.8,
-        context: 'guide_created',
-        metadata: {},
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 3600000).toISOString()
-      }),
-      executeQuery: jest.fn().mockResolvedValue([]),
-      getPheromonesByType: jest.fn().mockResolvedValue([])
-    } as any;
-
-    (CognitiveCanvas as jest.MockedClass<typeof CognitiveCanvas>).mockImplementation(() => mockCognitiveCanvas);
-
-    // Mock session manager
-    mockSessionManager = {} as any;
-    (SessionManager as jest.MockedClass<typeof SessionManager>).mockImplementation(() => mockSessionManager);
-
-    guide = new GuideAgent();
-  });
-
-  afterEach(() => {
-    delete process.env.GEMINI_API_KEY;
+    guide = new Guide();
   });
 
   describe('initialization', () => {
+    it('should initialize with correct capabilities', () => {
+      expect(guide.getCapabilities()).toEqual([]);
+      expect(guide.getRole()).toBe('');
+      expect(guide.getStatus()).toBe('uninitialized');
+    });
+
     it('should initialize successfully with valid config', async () => {
       await guide.initialize(mockConfig);
-      expect(guide.getStatus()).toBe('initialized');
+      
       expect(guide.getId()).toBe('guide-1');
       expect(guide.getRole()).toBe('guide');
-    });
-
-    it('should throw error if Gemini API key is missing', async () => {
-      delete process.env.GEMINI_API_KEY;
-      await expect(guide.initialize(mockConfig)).rejects.toThrow('Gemini API key is required');
-    });
-
-    it('should initialize Gemini client with correct model', async () => {
-      await guide.initialize(mockConfig);
-      expect(GoogleGenerativeAI).toHaveBeenCalledWith('test-gemini-key');
-      expect(mockGeminiClient.getGenerativeModel).toHaveBeenCalledWith({ model: 'gemini-pro' });
+      expect(guide.getStatus()).toBe('initialized');
+      expect(guide.getCapabilities()).toEqual([
+        'guidance',
+        'mentoring',
+        'best-practices',
+        'learning-paths'
+      ]);
     });
   });
 
-  describe('executeTask', () => {
+  describe('task execution', () => {
     beforeEach(async () => {
       await guide.initialize(mockConfig);
       await guide.receiveTask(mockTask, mockContext);
     });
 
-    it('should execute guide creation task successfully', async () => {
-      const result = await guide.executeTask();
-
-      expect(result).toEqual({
-        userGuide: expect.any(String),
-        tutorialSteps: expect.any(Array),
-        faqItems: expect.any(Array),
-        troubleshootingGuide: expect.any(String),
-        codeExamples: expect.any(Array),
-        metadata: expect.objectContaining({
-          totalSections: expect.any(Number),
-          totalSteps: expect.any(Number),
-          generatedAt: expect.any(String)
-        })
-      });
+    it('should accept a guidance task', async () => {
+      expect(guide.getCurrentTask()).toEqual(mockTask);
+      expect(guide.getTaskContext()).toEqual(mockContext);
+      expect(guide.getStatus()).toBe('assigned');
     });
 
-    it('should throw error if no task is assigned', async () => {
-      const emptyGuide = new GuideAgent();
-      await emptyGuide.initialize(mockConfig);
-      
-      await expect(emptyGuide.executeTask()).rejects.toThrow('No task or context available');
-    });
-
-    it('should throw error if Gemini client is not initialized', async () => {
-      const uninitializedGuide = new GuideAgent();
-      await uninitializedGuide.receiveTask(mockTask, mockContext);
-      
-      await expect(uninitializedGuide.executeTask()).rejects.toThrow('Gemini client not initialized');
-    });
-
-    it('should generate guide with proper structure', async () => {
-      mockGeminiModel.generateContent.mockResolvedValue({
-        response: {
-          text: () => `# User Guide
-
-## Getting Started
-Step 1: Install dependencies
-Step 2: Configure settings
-
-## FAQ
-Q: How do I start?
-A: Follow the getting started guide
-
-## Troubleshooting
-- Problem: App won't start
-  Solution: Check configuration
-
-## Code Examples
-\`\`\`javascript
-const app = new App();
-\`\`\``
+    it('should generate guidance recommendations', async () => {
+      const mockRecommendations: GuideRecommendation[] = [
+        {
+          id: 'rec-1',
+          title: 'Implement Unit Testing',
+          description: 'Add comprehensive unit tests for your React components',
+          category: 'testing',
+          priority: 'high',
+          complexity: 'moderate',
+          estimatedTime: '2-3 days',
+          prerequisites: ['Jest', 'React Testing Library'],
+          resources: [
+            {
+              type: 'documentation',
+              title: 'Jest Documentation',
+              url: 'https://jestjs.io/docs',
+              description: 'Official Jest testing framework documentation'
+            }
+          ],
+          actionItems: [
+            'Set up Jest configuration',
+            'Write component tests',
+            'Add coverage reporting'
+          ]
         }
-      });
+      ];
 
-      const result = await guide.executeTask();
+      jest.spyOn(guide as any, 'generateRecommendations').mockResolvedValue(mockRecommendations);
 
-      expect(result.userGuide).toContain('User Guide');
-      expect(result.tutorialSteps).toHaveLength(2);
-      expect(result.faqItems).toHaveLength(1);
-      expect(result.troubleshootingGuide).toContain('Problem');
-      expect(result.codeExamples).toHaveLength(1);
+      const result = await guide.run();
+
+      expect(result.success).toBe(true);
+      expect(result.result).toHaveProperty('recommendations');
+      expect(guide.getStatus()).toBe('completed');
     });
 
-    it('should create guide files in workspace', async () => {
-      const writeFileSpy = jest.spyOn(guide as any, 'writeFile').mockResolvedValue(undefined);
-      
-      await guide.executeTask();
+    it('should handle guidance generation errors', async () => {
+      jest.spyOn(guide as any, 'generateRecommendations').mockRejectedValue(new Error('Guidance generation failed'));
 
-      expect(writeFileSpy).toHaveBeenCalledWith(
-        'USER_GUIDE.md',
-        expect.stringContaining('User Guide')
-      );
-    });
-
-    it('should report progress during execution', async () => {
-      const reportProgressSpy = jest.spyOn(guide as any, 'reportProgress');
-      
-      await guide.executeTask();
-
-      expect(reportProgressSpy).toHaveBeenCalledWith('started', 'Beginning guide generation');
-      expect(reportProgressSpy).toHaveBeenCalledWith('completed', 'Guide generation completed');
-    });
-
-    it('should handle Gemini API errors gracefully', async () => {
-      mockGeminiModel.generateContent.mockRejectedValue(new Error('Gemini API error'));
-      
-      await expect(guide.executeTask()).rejects.toThrow('Failed to generate guide');
+      await expect(guide.run()).rejects.toThrow('Guidance generation failed');
+      expect(guide.getStatus()).toBe('error');
     });
   });
 
-  describe('getPromptTemplate', () => {
-    it('should return comprehensive prompt template', () => {
-      const template = guide.getPromptTemplate();
-      
-      expect(template).toContain('user-friendly guide');
-      expect(template).toContain('{{taskDescription}}');
-      expect(template).toContain('{{projectInfo}}');
-      expect(template).toContain('step-by-step');
-      expect(template).toContain('FAQ');
-      expect(template).toContain('troubleshooting');
-    });
-  });
-
-  describe('guide parsing', () => {
+  describe('recommendation generation', () => {
     beforeEach(async () => {
       await guide.initialize(mockConfig);
       await guide.receiveTask(mockTask, mockContext);
     });
 
-    it('should parse tutorial steps correctly', () => {
-      const content = `
-## Getting Started
-Step 1: Install dependencies
-Step 2: Configure settings
-Step 3: Run the application
-`;
-      const steps = (guide as any).parseTutorialSteps(content);
-      expect(steps).toHaveLength(3);
-      expect(steps[0].stepNumber).toBe(1);
-      expect(steps[0].title).toBe('Install dependencies');
-    });
-
-    it('should parse FAQ items correctly', () => {
-      const content = `
-## FAQ
-Q: How do I start?
-A: Follow the getting started guide
-
-Q: What if it doesn't work?
-A: Check the troubleshooting section
-`;
-      const faqItems = (guide as any).parseFAQItems(content);
-      expect(faqItems).toHaveLength(2);
-      expect(faqItems[0].question).toBe('How do I start?');
-      expect(faqItems[0].answer).toBe('Follow the getting started guide');
-    });
-
-    it('should extract code examples correctly', () => {
-      const content = `
-## Examples
-\`\`\`javascript
-const app = new App();
-app.start();
-\`\`\`
-
-\`\`\`typescript
-interface Config {
-  port: number;
-}
-\`\`\`
-`;
-      const examples = (guide as any).extractCodeExamples(content);
-      expect(examples).toHaveLength(2);
-      expect(examples[0].language).toBe('javascript');
-      expect(examples[0].code).toContain('const app = new App()');
-    });
-
-    it('should handle empty content gracefully', () => {
-      const steps = (guide as any).parseTutorialSteps('');
-      const faqItems = (guide as any).parseFAQItems('');
-      const examples = (guide as any).extractCodeExamples('');
-
-      expect(steps).toHaveLength(0);
-      expect(faqItems).toHaveLength(0);
-      expect(examples).toHaveLength(0);
-    });
-  });
-
-  describe('guide storage', () => {
-    beforeEach(async () => {
-      await guide.initialize(mockConfig);
-      await guide.receiveTask(mockTask, mockContext);
-    });
-
-    it('should store guide metadata in Cognitive Canvas via pheromone', async () => {
-      await guide.executeTask();
-
-      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'guide',
-          context: 'guide_completed',
-          metadata: expect.objectContaining({
-            guideType: 'user_guide',
-            title: expect.any(String),
-            contentPreview: expect.any(String)
-          })
-        })
-      );
-    });
-
-    it('should create appropriate pheromone', async () => {
-      await guide.executeTask();
-
-      expect(mockCognitiveCanvas.createPheromone).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'guide',
-          strength: 0.8,
-          context: 'guide_completed',
-          metadata: expect.objectContaining({
-            taskId: 'task-1',
-            guideType: 'user_guide'
-          })
-        })
-      );
-    });
-  });
-
-  describe('error handling', () => {
-    beforeEach(async () => {
-      await guide.initialize(mockConfig);
-      await guide.receiveTask(mockTask, mockContext);
-    });
-
-    it('should handle file writing errors', async () => {
-      const writeFileSpy = jest.spyOn(guide as any, 'writeFile').mockRejectedValue(new Error('File write error'));
-      
-      await expect(guide.executeTask()).rejects.toThrow('Failed to create guide documentation');
-    });
-
-    it('should handle Cognitive Canvas storage errors gracefully', async () => {
-      mockCognitiveCanvas.createPheromone.mockRejectedValue(new Error('Storage error'));
-      
-      // Should not throw, just warn
-      const result = await guide.executeTask();
-      expect(result).toBeDefined();
-    });
-
-    it('should validate task specification', async () => {
-      const newGuide = new GuideAgent();
-      await newGuide.initialize(mockConfig);
-      
-      const invalidTask = { ...mockTask, title: '', description: '' };
-      await newGuide.receiveTask(invalidTask, mockContext);
-      
-      await expect(newGuide.executeTask()).rejects.toThrow('Invalid task specification');
-    });
-  });
-
-  describe('configuration validation', () => {
-    it('should validate required capabilities', async () => {
-      const invalidConfig = {
-        ...mockConfig,
-        capabilities: ['wrong-capability']
+    it('should generate context-aware recommendations', async () => {
+      const context = {
+        projectType: 'web-application',
+        techStack: ['typescript', 'react'],
+        currentPhase: 'development',
+        experience: 'intermediate',
+        goals: ['improve testing']
       };
-      
-      await expect(guide.initialize(invalidConfig)).rejects.toThrow('Guide agent requires user-guidance capability');
+
+      const recommendations = await (guide as any).generateRecommendations(context);
+
+      expect(Array.isArray(recommendations)).toBe(true);
+      expect(recommendations.length).toBeGreaterThan(0);
+      expect(recommendations[0]).toHaveProperty('title');
+      expect(recommendations[0]).toHaveProperty('category');
+    });
+
+    it('should prioritize recommendations based on experience level', async () => {
+      const beginnerContext = {
+        projectType: 'web-application',
+        experience: 'beginner',
+        goals: ['learn basics']
+      };
+
+      const advancedContext = {
+        projectType: 'web-application',
+        experience: 'advanced',
+        goals: ['optimize architecture']
+      };
+
+      const beginnerRecs = await (guide as any).generateRecommendations(beginnerContext);
+      const advancedRecs = await (guide as any).generateRecommendations(advancedContext);
+
+      expect(beginnerRecs[0].complexity).toBe('simple');
+      expect(advancedRecs[0].complexity).toBe('complex');
+    });
+  });
+
+  describe('learning path creation', () => {
+    beforeEach(async () => {
+      await guide.initialize(mockConfig);
+    });
+
+    it('should create learning paths for specific goals', async () => {
+      const goals = ['learn testing', 'improve performance'];
+      const experience = 'intermediate';
+
+      const learningPath: LearningPath = await (guide as any).createLearningPath(goals, experience);
+
+      expect(learningPath.title).toBeDefined();
+      expect(learningPath.difficulty).toBe('intermediate');
+      expect(learningPath.modules.length).toBeGreaterThan(0);
+      expect(learningPath.outcomes.length).toBeGreaterThan(0);
+    });
+
+    it('should customize learning paths by tech stack', async () => {
+      const techStack = ['react', 'typescript'];
+      const path = await (guide as any).createTechStackLearningPath(techStack);
+
+      expect(path.title).toContain('React');
+      expect(path.modules.some((m: any) => m.title.includes('TypeScript'))).toBe(true);
+    });
+  });
+
+  describe('resource management', () => {
+    beforeEach(async () => {
+      await guide.initialize(mockConfig);
+    });
+
+    it('should curate resources by category', async () => {
+      const category = 'testing';
+      const resources = await (guide as any).curateResources(category);
+
+      expect(Array.isArray(resources)).toBe(true);
+      expect(resources.every((r: any) => r.type && r.title && r.description)).toBe(true);
+    });
+
+    it('should filter resources by experience level', async () => {
+      const beginnerResources = await (guide as any).filterResourcesByExperience('beginner');
+      const advancedResources = await (guide as any).filterResourcesByExperience('advanced');
+
+      expect(beginnerResources.length).toBeGreaterThan(0);
+      expect(advancedResources.length).toBeGreaterThan(0);
+      // Resources should be different for different experience levels
+      expect(beginnerResources[0].title).not.toBe(advancedResources[0].title);
+    });
+  });
+
+  describe('guidance personalization', () => {
+    beforeEach(async () => {
+      await guide.initialize(mockConfig);
+    });
+
+    it('should personalize guidance based on project context', async () => {
+      const webAppContext = { projectType: 'web-application', techStack: ['react'] };
+      const mobileContext = { projectType: 'mobile-app', techStack: ['react-native'] };
+
+      const webGuidance = await (guide as any).personalizeGuidance(webAppContext);
+      const mobileGuidance = await (guide as any).personalizeGuidance(mobileContext);
+
+      expect(webGuidance.focus).toContain('web');
+      expect(mobileGuidance.focus).toContain('mobile');
+    });
+
+    it('should adapt recommendations to current project phase', async () => {
+      const designPhase = { currentPhase: 'design' };
+      const testingPhase = { currentPhase: 'testing' };
+
+      const designGuidance = await (guide as any).getPhaseSpecificGuidance(designPhase);
+      const testingGuidance = await (guide as any).getPhaseSpecificGuidance(testingPhase);
+
+      expect(designGuidance.recommendations[0].category).toBe('architecture');
+      expect(testingGuidance.recommendations[0].category).toBe('testing');
     });
   });
 });

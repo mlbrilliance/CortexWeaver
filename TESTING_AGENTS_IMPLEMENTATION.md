@@ -1,6 +1,8 @@
 # Testing Agents Implementation Summary
 
-This document summarizes the implementation of four specialized testing agents for the CortexWeaver project.
+This document summarizes the implementation of four specialized testing agents for the CortexWeaver project. These agents integrate with the **Specification-Driven Development (SDD)** workflow to provide comprehensive testing based on formal contracts.
+
+> **Note**: For complete SDD workflow documentation, see [.claude/SDD_WORKFLOW.md](.claude/SDD_WORKFLOW.md).
 
 ## Implemented Agents
 
@@ -47,6 +49,28 @@ This document summarizes the implementation of four specialized testing agents f
 - Audits test suite's ability to detect real bugs
 
 **Test Coverage**: `/tests/agents/mutation-tester.test.ts` (16 test cases)
+
+## SDD Integration
+
+All testing agents are designed to work with the **Specification-Driven Development (SDD)** workflow:
+
+### Contract-Based Testing
+- **Property Tester**: Generates tests directly from property definitions in `/contracts/properties/`
+- **London Tester**: Creates contract tests based on OpenAPI specifications in `/contracts/api/`
+- **Chicago Tester**: Validates end-to-end workflows using formal contracts as ground truth
+- **Mutation Tester**: Assesses test suite effectiveness against contract-defined requirements
+
+### SDD Workflow Integration
+1. **Contract Generation**: Formalizer agent converts BDD scenarios to formal contracts
+2. **Test Generation**: Testing agents use contracts to generate comprehensive test suites
+3. **Validation**: Tests verify implementation compliance with formal specifications
+4. **Quality Assurance**: Multi-agent validation ensures contract adherence
+
+### Benefits of SDD for Testing
+- **Unambiguous Test Requirements**: Formal contracts eliminate interpretation differences
+- **Automated Test Generation**: Tests generated directly from machine-readable specifications
+- **Comprehensive Coverage**: Multiple testing approaches validate different contract aspects
+- **Consistent Validation**: All agents use the same formal contracts as source of truth
 
 ## Architecture
 
