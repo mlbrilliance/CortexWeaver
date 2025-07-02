@@ -1,4 +1,4 @@
-# CortexWeaver 4.0 Comprehensive .npmignore File
+# CortexWeaver 1.0.1 Comprehensive .npmignore File
 # ==================================================
 # Optimized for npm publishing - excludes development files while keeping
 # essential runtime files for the CortexWeaver CLI tool
@@ -189,6 +189,10 @@ pids/
 # Documentation Development Files
 # =====================================
 
+# Exclude all markdown files except README.md
+*.md
+!README.md
+
 # Documentation source (keep only generated docs)
 docs/src/
 docs/development/
@@ -336,17 +340,17 @@ memory-dumps/
 # - package.json
 # - README.md
 # - LICENSE
-# - CHANGELOG.md
-# - .npmignore (this file)
 # - Any runtime configuration templates
+# Note: .npmignore itself is excluded from the published package
 
 # Files that should be included (negation patterns):
 !dist/
 !package.json
 !README.md
 !LICENSE
-!CHANGELOG.md
-!.npmignore
+
+# Exclude .npmignore itself from the published package
+.npmignore
 
 # Include essential runtime templates
 !templates/
@@ -360,9 +364,9 @@ memory-dumps/
 
 # This .npmignore ensures the published package contains:
 # 1. Compiled JavaScript (dist/)
-# 2. Essential runtime files
+# 2. Essential runtime files (package.json, LICENSE)
 # 3. Default templates and configurations
-# 4. Documentation
+# 4. README.md only (no other markdown files)
 # 
 # While excluding:
 # 1. Source TypeScript files
@@ -371,5 +375,7 @@ memory-dumps/
 # 4. Development tools and IDE configs
 # 5. Temporary and cache files
 # 6. CI/CD and deployment configs
+# 7. All markdown files except README.md
+# 8. .npmignore itself
 
-# END OF CORTEXWEAVER 4.0 .NPMIGNORE
+# END OF CORTEXWEAVER 1.0.1 .NPMIGNORE

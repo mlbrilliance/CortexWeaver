@@ -22,6 +22,8 @@
 
 🎯 **Think of it as having a team of expert developers, each specializing in different aspects of software development, all working together seamlessly.**
 
+📦 **Available on NPM:** https://www.npmjs.com/package/cortexweaver
+
 ## 🌟 Why Choose CortexWeaver?
 
 ### 🚀 For Developers
