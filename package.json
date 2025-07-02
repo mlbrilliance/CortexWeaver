@@ -45,15 +45,19 @@
     "parallelization",
     "swarm-intelligence"
   ],
-  "author": "CortexWeaver Team",
+  "author": {
+    "name": "Nick Sudh",
+    "email": "nick@nicksudh.com",
+    "url": "https://nicksudh.com"
+  },
   "license": "MIT",
-  "homepage": "https://github.com/cortexweaver/cortexweaver#readme",
+  "homepage": "https://github.com/mlbrilliance/CortexWeaver#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cortexweaver/cortexweaver.git"
+    "url": "git+https://github.com/mlbrilliance/CortexWeaver.git"
   },
   "bugs": {
-    "url": "https://github.com/cortexweaver/cortexweaver/issues"
+    "url": "https://github.com/mlbrilliance/CortexWeaver/issues"
   },
   "engines": {
     "node": ">=18.0.0"
