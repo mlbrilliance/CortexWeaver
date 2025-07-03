@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "id": "node-1",
+      "labels": [
+        "Node"
+      ],
+      "properties": {
+        "id": "node-1"
+      }
+    },
+    {
+      "id": "node-2",
+      "labels": [
+        "Node"
+      ],
+      "properties": {
+        "id": "node-2"
+      }
+    }
+  ],
+  "relationships": [],
+  "metadata": {
+    "version": "1.0.0",
+    "timestamp": "2025-07-02T22:25:50.299Z",
+    "nodeCount": 2,
+    "relationshipCount": 0
+  }
+}

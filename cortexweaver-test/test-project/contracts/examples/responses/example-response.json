@@ -1,0 +1,14 @@
+{
+  "description": "Example API response data",
+  "examples": [
+    {
+      "name": "Example response",
+      "description": "A sample API response for reference",
+      "statusCode": 200,
+      "body": {
+        "message": "Hello from CortexWeaver!",
+        "timestamp": "2023-12-07T10:00:00.000Z"
+      }
+    }
+  ]
+}

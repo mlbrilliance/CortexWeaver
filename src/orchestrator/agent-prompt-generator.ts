@@ -16,6 +16,45 @@ export class AgentPromptGenerator {
   }
 
   /**
+   * Generate coordinated agent prompt with communication capabilities
+   */
+  generateCoordinatedAgentPrompt(
+    task: TaskData, 
+    agentType: AgentType, 
+    context?: TaskExecutionContext,
+    communicationChannel?: string,
+    cooperatingAgents?: string[]
+  ): string {
+    const basePrompt = this.generateBasePrompt(task, context);
+    let coordinatedPrompt = this.getAgentSpecificPrompt(basePrompt, agentType);
+
+    // Add coordination instructions
+    coordinatedPrompt += `\n\nCOORDINATION INFORMATION:`;
+    
+    if (communicationChannel) {
+      coordinatedPrompt += `\nCommunication Channel: ${communicationChannel}`;
+    }
+    
+    if (cooperatingAgents && cooperatingAgents.length > 0) {
+      coordinatedPrompt += `\nCooperating Agents: ${cooperatingAgents.join(', ')}`;
+      coordinatedPrompt += `\n\nCOORDINATION GUIDELINES:`;
+      coordinatedPrompt += `\n- You are part of a coordinated agent swarm working on related tasks`;
+      coordinatedPrompt += `\n- Share relevant findings and progress with cooperating agents`;
+      coordinatedPrompt += `\n- Be prepared to hand off work or receive handoffs from other agents`;
+      coordinatedPrompt += `\n- Communicate blockers or dependencies that might affect other agents`;
+      coordinatedPrompt += `\n- Follow the established workflow sequence and coordinate step transitions`;
+    }
+
+    coordinatedPrompt += `\n\nSwarm Intelligence Protocol:`;
+    coordinatedPrompt += `\n- Your work contributes to a larger collaborative effort`;
+    coordinatedPrompt += `\n- Maintain awareness of the broader project context`;
+    coordinatedPrompt += `\n- Document decisions and learnings for other agents`;
+    coordinatedPrompt += `\n- Be ready to adapt based on feedback from the swarm`;
+
+    return coordinatedPrompt;
+  }
+
+  /**
    * Generate CodeSavant prompt
    */
   generateCodeSavantPrompt(taskId: string, originalContext: string): string {

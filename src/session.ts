@@ -1,5 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 
@@ -18,17 +19,49 @@ export interface CommandOutput {
 
 export class SessionManager {
   private sessions: Map<string, SessionInfo> = new Map();
+  private sessionLocks: Map<string, Promise<any>> = new Map();
+  private cleanupIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private isShuttingDown: boolean = false;
 
   constructor() {
-    // Initialize session manager
+    // Initialize session manager with proper cleanup
+    process.on('SIGINT', () => this.gracefulShutdown());
+    process.on('SIGTERM', () => this.gracefulShutdown());
   }
 
   async createSession(taskId: string, workingDirectory: string): Promise<SessionInfo> {
+    if (this.isShuttingDown) {
+      throw new Error('Session manager is shutting down');
+    }
+
     const sessionId = `cortex-${taskId}-${Date.now()}`;
     
+    // Prevent concurrent session creation for the same task
+    const lockKey = `create-${taskId}`;
+    if (this.sessionLocks.has(lockKey)) {
+      await this.sessionLocks.get(lockKey);
+    }
+    
+    const createPromise = this._createSessionInternal(sessionId, taskId, workingDirectory);
+    this.sessionLocks.set(lockKey, createPromise);
+    
     try {
-      // Create detached tmux session
-      await execAsync(`tmux new-session -d -s ${sessionId} -c ${workingDirectory}`);
+      const result = await createPromise;
+      return result;
+    } finally {
+      this.sessionLocks.delete(lockKey);
+    }
+  }
+
+  private async _createSessionInternal(sessionId: string, taskId: string, workingDirectory: string): Promise<SessionInfo> {
+    try {
+      // Validate working directory exists
+      if (!fs.existsSync(workingDirectory)) {
+        throw new Error(`Working directory does not exist: ${workingDirectory}`);
+      }
+      
+      // Create detached tmux session with proper error handling
+      await execAsync(`tmux new-session -d -s ${sessionId} -c "${workingDirectory}"`);
       
       const sessionInfo: SessionInfo = {
         sessionId,
@@ -38,8 +71,14 @@ export class SessionManager {
       };
       
       this.sessions.set(sessionId, sessionInfo);
+      
+      // Set up automatic cleanup for the session
+      this.setupSessionCleanup(sessionId);
+      
       return sessionInfo;
     } catch (error) {
+      // Clean up on failure
+      this.sessions.delete(sessionId);
       throw new Error(`Failed to create tmux session: ${(error as Error).message}`);
     }
   }
@@ -114,12 +153,29 @@ export class SessionManager {
   }
 
   async killSession(sessionId: string): Promise<boolean> {
+    // Clear any cleanup intervals for this session
+    const interval = this.cleanupIntervals.get(sessionId);
+    if (interval) {
+      clearTimeout(interval);
+      this.cleanupIntervals.delete(sessionId);
+    }
+    
+    // Wait for any pending operations on this session
+    const lockKey = `start-${sessionId}`;
+    if (this.sessionLocks.has(lockKey)) {
+      try {
+        await this.sessionLocks.get(lockKey);
+      } catch (error) {
+        // Ignore errors from pending operations during shutdown
+      }
+    }
+    
     try {
       await execAsync(`tmux kill-session -t ${sessionId}`);
       this.sessions.delete(sessionId);
       return true;
     } catch (error) {
-      // Session might not exist
+      // Session might not exist, still remove from tracking
       this.sessions.delete(sessionId);
       return false;
     }
@@ -159,21 +215,56 @@ export class SessionManager {
   }
 
   async startAgentInSession(sessionId: string, agentCommand: string, prompt: string): Promise<void> {
+    if (this.isShuttingDown) {
+      throw new Error('Session manager is shutting down');
+    }
+
+    // Prevent concurrent agent starts in the same session
+    const lockKey = `start-${sessionId}`;
+    if (this.sessionLocks.has(lockKey)) {
+      await this.sessionLocks.get(lockKey);
+    }
+    
+    const startPromise = this._startAgentInternal(sessionId, agentCommand, prompt);
+    this.sessionLocks.set(lockKey, startPromise);
+    
+    try {
+      await startPromise;
+    } finally {
+      this.sessionLocks.delete(lockKey);
+    }
+  }
+
+  private async _startAgentInternal(sessionId: string, agentCommand: string, prompt: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
 
+    // Check if session is still alive
     try {
-      // Write prompt to a temporary file with proper escaping
-      const promptFile = `/tmp/prompt-${sessionId}-${Date.now()}.txt`;
+      await this.checkSessionExists(sessionId);
+    } catch (error) {
+      // Update session status and clean up
+      session.status = 'error';
+      this.sessions.delete(sessionId);
+      throw new Error(`Session ${sessionId} is no longer active`);
+    }
+
+    let promptFile: string | null = null;
+    
+    try {
+      // Create secure temporary file for prompt
+      promptFile = `/tmp/prompt-${sessionId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.txt`;
       const escapedPrompt = prompt.replace(/'/g, "'\"'\"'"); // Escape single quotes for shell
-      await execAsync(`echo '${escapedPrompt}' > ${promptFile}`);
       
-      // Verify the prompt file was created
-      const { stdout: fileCheck } = await execAsync(`test -f ${promptFile} && echo "exists"`);
+      // Write prompt file atomically
+      await execAsync(`echo '${escapedPrompt}' > ${promptFile} && chmod 600 ${promptFile}`);
+      
+      // Verify the prompt file was created and is readable
+      const { stdout: fileCheck } = await execAsync(`test -r ${promptFile} && echo "exists"`);
       if (!fileCheck.includes('exists')) {
-        throw new Error('Failed to create prompt file');
+        throw new Error('Failed to create or verify prompt file');
       }
       
       // Start the agent with the prompt, ensuring proper command execution
@@ -182,16 +273,26 @@ export class SessionManager {
       
       console.log(`Started agent in session ${sessionId} with command: ${agentCommand}`);
       
-      // Clean up the prompt file after a delay
+      // Schedule prompt file cleanup with proper error handling
       setTimeout(async () => {
-        try {
-          await execAsync(`rm -f ${promptFile}`);
-        } catch (cleanupError) {
-          console.warn(`Failed to cleanup prompt file: ${cleanupError}`);
+        if (promptFile) {
+          try {
+            await execAsync(`rm -f ${promptFile}`);
+          } catch (cleanupError) {
+            console.warn(`Failed to cleanup prompt file ${promptFile}: ${cleanupError}`);
+          }
         }
       }, 5000);
       
     } catch (error) {
+      // Clean up prompt file immediately on error
+      if (promptFile) {
+        try {
+          await execAsync(`rm -f ${promptFile}`);
+        } catch (cleanupError) {
+          console.warn(`Failed to cleanup prompt file after error: ${cleanupError}`);
+        }
+      }
       throw new Error(`Failed to start agent: ${(error as Error).message}`);
     }
   }
@@ -234,13 +335,82 @@ export class SessionManager {
   }
 
   async cleanupDeadSessions(): Promise<void> {
-    const activeSessions = await this.listActiveTmuxSessions();
+    if (this.isShuttingDown) {
+      return;
+    }
     
-    for (const [sessionId, sessionInfo] of this.sessions.entries()) {
-      if (!activeSessions.includes(sessionId)) {
-        this.sessions.delete(sessionId);
-        console.log(`Cleaned up dead session: ${sessionId}`);
+    try {
+      const activeSessions = await this.listActiveTmuxSessions();
+      
+      for (const [sessionId, sessionInfo] of this.sessions.entries()) {
+        if (!activeSessions.includes(sessionId)) {
+          // Clear any cleanup intervals for dead sessions
+          const interval = this.cleanupIntervals.get(sessionId);
+          if (interval) {
+            clearTimeout(interval);
+            this.cleanupIntervals.delete(sessionId);
+          }
+          
+          this.sessions.delete(sessionId);
+          console.log(`Cleaned up dead session: ${sessionId}`);
+        }
       }
+    } catch (error) {
+      console.warn(`Error during session cleanup: ${error}`);
+    }
+  }
+
+  private setupSessionCleanup(sessionId: string): void {
+    // Set up automatic cleanup after 1 hour of inactivity
+    const cleanup = setTimeout(async () => {
+      console.log(`Auto-cleaning up session ${sessionId} after timeout`);
+      await this.killSession(sessionId);
+    }, 60 * 60 * 1000); // 1 hour
+    
+    this.cleanupIntervals.set(sessionId, cleanup);
+  }
+
+  private async gracefulShutdown(): Promise<void> {
+    console.log('Starting graceful shutdown of SessionManager...');
+    this.isShuttingDown = true;
+    
+    // Clear all cleanup intervals
+    for (const interval of this.cleanupIntervals.values()) {
+      clearTimeout(interval);
+    }
+    this.cleanupIntervals.clear();
+    
+    // Kill all active sessions
+    const sessions = Array.from(this.sessions.keys());
+    const killPromises = sessions.map(sessionId => 
+      this.killSession(sessionId).catch(error => 
+        console.warn(`Failed to kill session ${sessionId}:`, error)
+      )
+    );
+    
+    await Promise.allSettled(killPromises);
+    
+    // Clear session locks
+    this.sessionLocks.clear();
+    
+    console.log('SessionManager graceful shutdown complete');
+  }
+
+  // Health check method
+  async healthCheck(): Promise<{ healthy: boolean; sessionCount: number; activeSessionCount: number }> {
+    try {
+      const activeSessions = await this.listActiveTmuxSessions();
+      return {
+        healthy: !this.isShuttingDown,
+        sessionCount: this.sessions.size,
+        activeSessionCount: activeSessions.length
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        sessionCount: this.sessions.size,
+        activeSessionCount: 0
+      };
     }
   }
 }

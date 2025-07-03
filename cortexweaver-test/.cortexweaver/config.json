@@ -1,0 +1,22 @@
+{
+  "models": {
+    "claude": "claude-3-opus-20240229",
+    "gemini": "gemini-pro"
+  },
+  "costs": {
+    "claudeTokenCost": 0.015,
+    "geminiTokenCost": 0.0005
+  },
+  "budget": {
+    "maxTokens": 50000,
+    "maxCost": 500
+  },
+  "parallelism": {
+    "maxConcurrentTasks": 5,
+    "maxConcurrentAgents": 3
+  },
+  "monitoring": {
+    "enableMetrics": true,
+    "logLevel": "info"
+  }
+}

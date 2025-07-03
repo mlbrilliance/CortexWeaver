@@ -1,0 +1,14 @@
+{
+  "description": "Example API request data",
+  "examples": [
+    {
+      "name": "Example request",
+      "description": "A sample API request for reference",
+      "data": {
+        "message": "Hello, CortexWeaver!"
+      },
+      "expectedStatus": 200,
+      "expectedResponse": "example-response.json"
+    }
+  ]
+}

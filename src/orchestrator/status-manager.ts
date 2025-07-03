@@ -40,6 +40,40 @@ export interface SystemHealth {
   budgetUtilization: number;
   errorRate: number;
   lastHealthCheck: string;
+  memoryUsage?: {
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+  };
+  networkLatency?: number;
+  databaseLatency?: number;
+}
+
+export interface RealTimeMetrics {
+  timestamp: string;
+  tasksPerMinute: number;
+  averageTaskDuration: number;
+  agentEfficiency: {
+    [agentType: string]: {
+      tasksCompleted: number;
+      averageDuration: number;
+      successRate: number;
+    };
+  };
+  resourceUtilization: {
+    cpu: number;
+    memory: number;
+    network: number;
+  };
+  alertLevel: 'normal' | 'warning' | 'critical';
+}
+
+export interface CoordinationEvent {
+  id: string;
+  type: 'task_started' | 'task_completed' | 'task_failed' | 'agent_spawned' | 'handoff' | 'system_alert';
+  timestamp: string;
+  details: any;
+  priority: 'low' | 'medium' | 'high' | 'critical';
 }
 
 export class StatusManager {
@@ -47,13 +81,32 @@ export class StatusManager {
   private running: boolean = false;
   private projectId: string | null = null;
   private lastHealthCheck: Date = new Date();
+  private realTimeMonitoring: boolean = false;
+  private monitoringInterval?: NodeJS.Timeout;
+  private coordinationEventQueue: CoordinationEvent[] = [];
+  private performanceMetrics: {
+    taskStartTimes: Map<string, number>;
+    taskCompletionTimes: Map<string, number>;
+    agentPerformance: Map<string, {
+      tasksCompleted: number;
+      totalDuration: number;
+      successes: number;
+      failures: number;
+    }>;
+  } = {
+    taskStartTimes: new Map(),
+    taskCompletionTimes: new Map(),
+    agentPerformance: new Map()
+  };
 
   constructor(
     private canvas: CognitiveCanvas,
     private client: ClaudeClient,
     private sessionManager: SessionManager,
     private workflowManager: WorkflowManager
-  ) {}
+  ) {
+    this.setupRealtimeMonitoring();
+  }
 
   /**
    * Set orchestrator status
@@ -387,6 +440,251 @@ export class StatusManager {
   }
 
   /**
+   * Setup real-time monitoring
+   */
+  private setupRealtimeMonitoring(): void {
+    this.realTimeMonitoring = true;
+    
+    // Set up periodic health checks and metrics collection
+    this.monitoringInterval = setInterval(async () => {
+      if (this.running) {
+        await this.collectRealTimeMetrics();
+        await this.processCoordinationEvents();
+      }
+    }, 5000); // Every 5 seconds
+  }
+
+  /**
+   * Collect real-time metrics
+   */
+  private async collectRealTimeMetrics(): Promise<void> {
+    try {
+      const memoryUsage = process.memoryUsage();
+      const healthData = await this.getSystemHealth();
+      
+      // Update health data with system metrics
+      healthData.memoryUsage = {
+        heapUsed: memoryUsage.heapUsed / 1024 / 1024, // MB
+        heapTotal: memoryUsage.heapTotal / 1024 / 1024, // MB
+        external: memoryUsage.external / 1024 / 1024 // MB
+      };
+      
+      // Measure database latency
+      const dbStartTime = Date.now();
+      if (this.projectId) {
+        await this.canvas.getProjectCount();
+      }
+      healthData.databaseLatency = Date.now() - dbStartTime;
+      
+      // Emit coordination event for system health
+      this.emitCoordinationEvent({
+        id: `health-${Date.now()}`,
+        type: 'system_alert',
+        timestamp: new Date().toISOString(),
+        details: healthData,
+        priority: healthData.errorRate > 50 ? 'critical' : 
+                 healthData.budgetUtilization > 80 ? 'high' : 'low'
+      });
+      
+    } catch (error) {
+      console.error('Error collecting real-time metrics:', error);
+    }
+  }
+
+  /**
+   * Process coordination events
+   */
+  private async processCoordinationEvents(): Promise<void> {
+    // Process high-priority events first
+    const sortedEvents = this.coordinationEventQueue.sort((a, b) => {
+      const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    });
+    
+    for (const event of sortedEvents.slice(0, 10)) { // Process up to 10 events per cycle
+      await this.handleCoordinationEvent(event);
+    }
+    
+    // Remove processed events
+    this.coordinationEventQueue = this.coordinationEventQueue.slice(10);
+  }
+
+  /**
+   * Handle coordination event
+   */
+  private async handleCoordinationEvent(event: CoordinationEvent): Promise<void> {
+    switch (event.type) {
+      case 'task_started':
+        this.performanceMetrics.taskStartTimes.set(event.details.taskId, Date.now());
+        break;
+        
+      case 'task_completed':
+        const startTime = this.performanceMetrics.taskStartTimes.get(event.details.taskId);
+        if (startTime) {
+          const duration = Date.now() - startTime;
+          this.performanceMetrics.taskCompletionTimes.set(event.details.taskId, duration);
+          this.updateAgentPerformance(event.details.agentType, duration, true);
+        }
+        break;
+        
+      case 'task_failed':
+        this.updateAgentPerformance(event.details.agentType, 0, false);
+        break;
+        
+      case 'system_alert':
+        if (event.priority === 'critical') {
+          console.error('🚨 CRITICAL SYSTEM ALERT:', event.details);
+        } else if (event.priority === 'high') {
+          console.warn('⚠️  SYSTEM WARNING:', event.details);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Update agent performance metrics
+   */
+  private updateAgentPerformance(agentType: string, duration: number, success: boolean): void {
+    const current = this.performanceMetrics.agentPerformance.get(agentType) || {
+      tasksCompleted: 0,
+      totalDuration: 0,
+      successes: 0,
+      failures: 0
+    };
+    
+    current.tasksCompleted++;
+    current.totalDuration += duration;
+    
+    if (success) {
+      current.successes++;
+    } else {
+      current.failures++;
+    }
+    
+    this.performanceMetrics.agentPerformance.set(agentType, current);
+  }
+
+  /**
+   * Emit coordination event
+   */
+  emitCoordinationEvent(event: CoordinationEvent): void {
+    this.coordinationEventQueue.push(event);
+    
+    // Immediate handling for critical events
+    if (event.priority === 'critical') {
+      this.handleCoordinationEvent(event);
+    }
+  }
+
+  /**
+   * Get real-time metrics
+   */
+  async getRealTimeMetrics(): Promise<RealTimeMetrics> {
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+    
+    // Calculate tasks per minute
+    const recentCompletions = Array.from(this.performanceMetrics.taskCompletionTimes.entries())
+      .filter(([taskId, completionTime]) => completionTime > oneMinuteAgo);
+    
+    const tasksPerMinute = recentCompletions.length;
+    
+    // Calculate average task duration
+    const totalDuration = recentCompletions.reduce((sum, [taskId, duration]) => sum + duration, 0);
+    const averageTaskDuration = recentCompletions.length > 0 ? totalDuration / recentCompletions.length : 0;
+    
+    // Calculate agent efficiency
+    const agentEfficiency: RealTimeMetrics['agentEfficiency'] = {};
+    for (const [agentType, metrics] of this.performanceMetrics.agentPerformance.entries()) {
+      agentEfficiency[agentType] = {
+        tasksCompleted: metrics.tasksCompleted,
+        averageDuration: metrics.tasksCompleted > 0 ? metrics.totalDuration / metrics.tasksCompleted : 0,
+        successRate: metrics.tasksCompleted > 0 ? (metrics.successes / metrics.tasksCompleted) * 100 : 0
+      };
+    }
+    
+    // Get system resource utilization
+    const memUsage = process.memoryUsage();
+    const resourceUtilization = {
+      cpu: process.cpuUsage().user / 1000000, // Convert to seconds
+      memory: memUsage.heapUsed / memUsage.heapTotal * 100,
+      network: 0 // Would need additional monitoring
+    };
+    
+    // Determine alert level
+    const budgetUtilization = this.getBudgetUtilization();
+    const errorRate = (await this.getSystemHealth()).errorRate;
+    
+    let alertLevel: RealTimeMetrics['alertLevel'] = 'normal';
+    if (errorRate > 50 || budgetUtilization > 90) {
+      alertLevel = 'critical';
+    } else if (errorRate > 25 || budgetUtilization > 75) {
+      alertLevel = 'warning';
+    }
+    
+    return {
+      timestamp: new Date().toISOString(),
+      tasksPerMinute,
+      averageTaskDuration,
+      agentEfficiency,
+      resourceUtilization,
+      alertLevel
+    };
+  }
+
+  /**
+   * Start real-time monitoring
+   */
+  startRealTimeMonitoring(): void {
+    if (!this.realTimeMonitoring) {
+      this.setupRealtimeMonitoring();
+    }
+    console.log('📊 Real-time monitoring started');
+  }
+
+  /**
+   * Stop real-time monitoring
+   */
+  stopRealTimeMonitoring(): void {
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = undefined;
+    }
+    this.realTimeMonitoring = false;
+    console.log('📊 Real-time monitoring stopped');
+  }
+
+  /**
+   * Get coordination events
+   */
+  getCoordinationEvents(limit: number = 50): CoordinationEvent[] {
+    return this.coordinationEventQueue.slice(0, limit);
+  }
+
+  /**
+   * Get performance summary
+   */
+  getPerformanceSummary(): any {
+    const agentSummary: any = {};
+    
+    for (const [agentType, metrics] of this.performanceMetrics.agentPerformance.entries()) {
+      agentSummary[agentType] = {
+        tasksCompleted: metrics.tasksCompleted,
+        averageDuration: metrics.tasksCompleted > 0 ? 
+          Math.round(metrics.totalDuration / metrics.tasksCompleted) : 0,
+        successRate: metrics.tasksCompleted > 0 ? 
+          Math.round((metrics.successes / metrics.tasksCompleted) * 100) : 0
+      };
+    }
+    
+    return {
+      totalTasksTracked: this.performanceMetrics.taskCompletionTimes.size,
+      agents: agentSummary,
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
+  /**
    * Reset status manager for new project
    */
   reset(): void {
@@ -394,6 +692,21 @@ export class StatusManager {
     this.running = false;
     this.projectId = null;
     this.lastHealthCheck = new Date();
+    
+    // Clear performance metrics
+    this.performanceMetrics.taskStartTimes.clear();
+    this.performanceMetrics.taskCompletionTimes.clear();
+    this.performanceMetrics.agentPerformance.clear();
+    this.coordinationEventQueue = [];
+    
     console.log('Status manager reset');
+  }
+
+  /**
+   * Cleanup monitoring resources
+   */
+  cleanup(): void {
+    this.stopRealTimeMonitoring();
+    this.reset();
   }
 }

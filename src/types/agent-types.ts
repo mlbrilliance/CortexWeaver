@@ -1,4 +1,5 @@
 import { ClaudeModel } from '../claude-client';
+import { CognitiveCanvas } from '../cognitive-canvas';
 
 export interface AgentConfig {
   id: string;
@@ -11,7 +12,8 @@ export interface AgentConfig {
     temperature?: number;
   };
   workspaceRoot: string;
-  cognitiveCanvasConfig: {
+  cognitiveCanvas?: CognitiveCanvas;
+  cognitiveCanvasConfig?: {
     uri: string;
     username: string;
     password: string;

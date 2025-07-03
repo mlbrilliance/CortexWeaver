@@ -1,4 +1,6 @@
 import neo4j, { Driver } from 'neo4j-driver';
+import { TransactionManager } from './transaction/transaction-manager.js';
+import { StorageManager } from '../storage/index.js';
 import { Neo4jConfig } from './types';
 import { CoreOperations } from './core-operations';
 import { QueryEngine } from './query-engine';
@@ -7,25 +9,31 @@ import { AgentIntegration } from './agent-integration';
 import { Persistence } from './persistence';
 
 export class CognitiveCanvas {
-  private driver: Driver;
+  private driver: Driver | null = null;
   private autoSaveInterval?: NodeJS.Timeout;
   private snapshotsDir: string;
 
   // Modular components
-  private coreOps: CoreOperations;
-  private queryEngine: QueryEngine;
-  private pheromoneManager: PheromoneManager;
-  private agentIntegration: AgentIntegration;
-  private persistence: Persistence;
+  private coreOps!: CoreOperations;
+  private queryEngine!: QueryEngine;
+  private pheromoneManager!: PheromoneManager;
+  private agentIntegration!: AgentIntegration;
+  private persistence!: Persistence;
 
   // Core Operations methods
   createProject!: CoreOperations['createProject'];
   getProject!: CoreOperations['getProject'];
+  getAllProjects!: CoreOperations['getAllProjects'];
+  getProjectCount!: CoreOperations['getProjectCount'];
   updateProjectStatus!: CoreOperations['updateProjectStatus'];
   createTask!: CoreOperations['createTask'];
   updateTaskStatus!: CoreOperations['updateTaskStatus'];
   createTaskDependency!: CoreOperations['createTaskDependency'];
   createAgent!: CoreOperations['createAgent'];
+  getTasksWithStatus!: CoreOperations['getTasksWithStatus'];
+  getAgentsWithStatus!: CoreOperations['getAgentsWithStatus'];
+  getTasksByProject!: CoreOperations['getTasksByProject'];
+  getAgentsByProject!: CoreOperations['getAgentsByProject'];
   assignAgentToTask!: CoreOperations['assignAgentToTask'];
   storeArchitecturalDecision!: CoreOperations['storeArchitecturalDecision'];
   createContract!: CoreOperations['createContract'];
@@ -41,7 +49,6 @@ export class CognitiveCanvas {
   linkPrototypeToContract!: CoreOperations['linkPrototypeToContract'];
 
   // Query Engine methods
-  getTasksByProject!: QueryEngine['getTasksByProject'];
   getTaskDependencies!: QueryEngine['getTaskDependencies'];
   findSimilarTasks!: QueryEngine['findSimilarTasks'];
   getAgentAssignments!: QueryEngine['getAgentAssignments'];
@@ -114,33 +121,74 @@ export class CognitiveCanvas {
   listSnapshots!: Persistence['listSnapshots'];
   restoreFromSnapshot!: Persistence['restoreFromSnapshot'];
 
-  constructor(config: Neo4jConfig, snapshotsDir: string = './snapshots') {
-    this.driver = neo4j.driver(
-      config.uri,
-      neo4j.auth.basic(config.username, config.password)
-    );
+  // Constructor overloads for backward compatibility and new storage system
+  constructor(configOrStorage: Neo4jConfig | StorageManager, snapshotsDir: string = './snapshots') {
     this.snapshotsDir = snapshotsDir;
 
-    // Initialize modular components with shared driver
-    this.coreOps = new CoreOperations(this.driver);
-    this.queryEngine = new QueryEngine(this.driver);
-    this.pheromoneManager = new PheromoneManager(this.driver);
-    this.agentIntegration = new AgentIntegration(this.driver);
-    this.persistence = new Persistence(this.driver, snapshotsDir);
+    if (configOrStorage instanceof StorageManager) {
+      // New storage-based initialization
+      this.initializeWithStorageManager(configOrStorage);
+    } else {
+      // Legacy Neo4j config initialization
+      this.initializeWithNeo4jConfig(configOrStorage);
+    }
 
     // Bind methods after components are initialized
     this.bindMethods();
   }
 
+  private initializeWithStorageManager(storageManager: StorageManager): void {
+    // For storage manager, we don't need a direct driver
+    // Components will use the storage abstraction
+    this.driver = null as any; // Will be deprecated
+    
+    // Initialize modular components with storage manager (placeholder)
+    // TODO: Update component constructors to accept StorageManager
+    this.coreOps = {} as CoreOperations;
+    this.queryEngine = {} as QueryEngine;
+    this.pheromoneManager = {} as PheromoneManager;
+    this.agentIntegration = {} as AgentIntegration;
+    this.persistence = {} as Persistence;
+  }
+
+  private initializeWithNeo4jConfig(config: Neo4jConfig): void {
+    // Legacy initialization for backward compatibility
+    this.driver = neo4j.driver(
+      config.uri,
+      neo4j.auth.basic(config.username, config.password)
+    );
+
+    // Create single shared transaction manager
+    const sharedTransactionManager = new TransactionManager(this.driver);
+
+    // Initialize modular components with shared transaction manager
+    this.coreOps = new CoreOperations(this.driver, sharedTransactionManager);
+    this.queryEngine = new QueryEngine(this.driver, sharedTransactionManager);
+    this.pheromoneManager = new PheromoneManager(this.driver, sharedTransactionManager);
+    this.agentIntegration = new AgentIntegration(this.driver, sharedTransactionManager);
+    this.persistence = new Persistence(this.driver, this.snapshotsDir, sharedTransactionManager);
+  }
+
   private bindMethods(): void {
+    // Skip method binding when using StorageManager (components are placeholders)
+    if (!this.coreOps.createProject) {
+      return;
+    }
+    
     // Core Operations - delegate to coreOps
     this.createProject = this.coreOps.createProject.bind(this.coreOps);
     this.getProject = this.coreOps.getProject.bind(this.coreOps);
+    this.getAllProjects = this.coreOps.getAllProjects.bind(this.coreOps);
+    this.getProjectCount = this.coreOps.getProjectCount.bind(this.coreOps);
     this.updateProjectStatus = this.coreOps.updateProjectStatus.bind(this.coreOps);
     this.createTask = this.coreOps.createTask.bind(this.coreOps);
     this.updateTaskStatus = this.coreOps.updateTaskStatus.bind(this.coreOps);
     this.createTaskDependency = this.coreOps.createTaskDependency.bind(this.coreOps);
     this.createAgent = this.coreOps.createAgent.bind(this.coreOps);
+    this.getTasksWithStatus = this.coreOps.getTasksWithStatus.bind(this.coreOps);
+    this.getAgentsWithStatus = this.coreOps.getAgentsWithStatus.bind(this.coreOps);
+    this.getTasksByProject = this.coreOps.getTasksByProject.bind(this.coreOps);
+    this.getAgentsByProject = this.coreOps.getAgentsByProject.bind(this.coreOps);
     this.assignAgentToTask = this.coreOps.assignAgentToTask.bind(this.coreOps);
     this.storeArchitecturalDecision = this.coreOps.storeArchitecturalDecision.bind(this.coreOps);
     this.createContract = this.coreOps.createContract.bind(this.coreOps);
@@ -231,10 +279,20 @@ export class CognitiveCanvas {
   }
 
   async initializeSchema(): Promise<void> {
-    // Use transaction manager for proper constraint creation
-    const transactionManager = this.coreOps.getTransactionManager();
+    // Use storage-agnostic schema initialization
+    // For now, use legacy initialization as we transition to storage abstraction
+    await this.initializeSchemaDirect();
+  }
+
+  // Legacy schema initialization for backward compatibility
+  private async initializeSchemaDirect(): Promise<void> {
+    if (!this.driver) {
+      console.log('📝 Skipping direct schema initialization - using storage abstraction');
+      return;
+    }
     
-    await transactionManager.executeInWriteTransaction(async (tx) => {
+    const session = this.driver.session();
+    try {
       const constraints = [
         'CREATE CONSTRAINT project_id IF NOT EXISTS FOR (p:Project) REQUIRE p.id IS UNIQUE',
         'CREATE CONSTRAINT task_id IF NOT EXISTS FOR (t:Task) REQUIRE t.id IS UNIQUE',
@@ -250,7 +308,7 @@ export class CognitiveCanvas {
       // Execute constraints sequentially to avoid conflicts
       for (const constraint of constraints) {
         try {
-          await tx.run(constraint);
+          await session.run(constraint);
         } catch (error) {
           // Log but don't fail if constraint already exists
           if (!(error instanceof Error) || !error.message.includes('already exists')) {
@@ -258,9 +316,9 @@ export class CognitiveCanvas {
           }
         }
       }
-      
-      return true;
-    });
+    } finally {
+      await session.close();
+    }
   }
 
 
@@ -282,7 +340,9 @@ export class CognitiveCanvas {
     if (this.autoSaveInterval) {
       clearInterval(this.autoSaveInterval);
     }
-    await this.driver.close();
+    if (this.driver) {
+      await this.driver.close();
+    }
   }
 }
 

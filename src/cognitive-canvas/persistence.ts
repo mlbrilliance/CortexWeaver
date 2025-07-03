@@ -1,52 +1,53 @@
-import { Driver } from 'neo4j-driver';
+import { Driver, ManagedTransaction } from 'neo4j-driver';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { SnapshotData } from './types';
+import { TransactionManager } from './transaction/transaction-manager.js';
 
 export class Persistence {
-  constructor(private driver: Driver, private snapshotsDir: string = './snapshots') {}
+  private transactionManager: TransactionManager;
+  
+  constructor(private driver: Driver, private snapshotsDir: string = './snapshots', sharedTransactionManager?: TransactionManager) {
+    this.transactionManager = sharedTransactionManager || new TransactionManager(driver);
+  }
 
   async saveSnapshot(filepath: string): Promise<void> {
     const snapshotDir = path.dirname(filepath);
     await fs.mkdir(snapshotDir, { recursive: true });
 
-    const nodesSession = this.driver.session();
-    let nodes: any[] = [];
-    try {
-      const nodesResult = await nodesSession.run('MATCH (n) RETURN n');
-      nodes = nodesResult.records.map(record => {
-        const node = record.get('n');
-        return {
-          id: node.identity.low ? node.identity.low.toString() : Math.random().toString(36).substring(7),
-          labels: node.labels,
-          properties: node.properties
-        };
-      });
-    } finally {
-      await nodesSession.close();
-    }
-
-    const relsSession = this.driver.session();
-    let relationships: any[] = [];
-    try {
-      const relsResult = await relsSession.run('MATCH ()-[r]->() RETURN startNode(r) as start, endNode(r) as end, type(r) as type, properties(r) as props');
-      relationships = relsResult.records.map(record => {
-        const startNode = record.get('start');
-        const endNode = record.get('end');
-        return {
-          id: Math.random().toString(36).substring(7), // Generate temp ID
-          startNode: startNode.identity.low ? startNode.identity.low.toString() : Math.random().toString(36).substring(7),
-          endNode: endNode.identity.low ? endNode.identity.low.toString() : Math.random().toString(36).substring(7),
-          type: record.get('type'),
-          properties: record.get('props')
-        };
-      });
-    } finally {
-      await relsSession.close();
-    }
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        // Get nodes
+        const nodesResult = await tx.run('MATCH (n) RETURN n');
+        const nodes = nodesResult.records.map(record => {
+          const node = record.get('n');
+          return {
+            id: node.identity.low ? node.identity.low.toString() : Math.random().toString(36).substring(7),
+            labels: node.labels,
+            properties: node.properties
+          };
+        });
+        
+        // Get relationships
+        const relsResult = await tx.run('MATCH ()-[r]->() RETURN startNode(r) as start, endNode(r) as end, type(r) as type, properties(r) as props');
+        const relationships = relsResult.records.map(record => {
+          const startNode = record.get('start');
+          const endNode = record.get('end');
+          return {
+            id: Math.random().toString(36).substring(7), // Generate temp ID
+            startNode: startNode.identity.low ? startNode.identity.low.toString() : Math.random().toString(36).substring(7),
+            endNode: endNode.identity.low ? endNode.identity.low.toString() : Math.random().toString(36).substring(7),
+            type: record.get('type'),
+            properties: record.get('props')
+          };
+        });
+        
+        return { nodes, relationships };
+      }
+    );
 
     const nodeTypes: Record<string, number> = {};
-    nodes.forEach(node => {
+    result.data.nodes.forEach(node => {
       node.labels.forEach((label: string) => {
         nodeTypes[label] = (nodeTypes[label] || 0) + 1;
       });
@@ -56,12 +57,12 @@ export class Persistence {
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       metadata: {
-        totalNodes: nodes.length,
-        totalRelationships: relationships.length,
+        totalNodes: result.data.nodes.length,
+        totalRelationships: result.data.relationships.length,
         nodeTypes
       },
-      nodes,
-      relationships
+      nodes: result.data.nodes,
+      relationships: result.data.relationships
     };
 
     await fs.writeFile(filepath, JSON.stringify(snapshot, null, 2), 'utf8');
@@ -74,51 +75,52 @@ export class Persistence {
     this.validateSnapshotFormat(snapshot);
 
     // Clear existing data
-    const clearSession = this.driver.session();
-    try {
-      await clearSession.run('MATCH (n) DETACH DELETE n');
-    } finally {
-      await clearSession.close();
-    }
+    await this.transactionManager.executeInWriteTransaction(
+      async (tx: ManagedTransaction) => {
+        await tx.run('MATCH (n) DETACH DELETE n');
+        return true;
+      }
+    );
 
     // Batch create nodes
     const batchSize = 100;
     for (let i = 0; i < snapshot.nodes.length; i += batchSize) {
       const batch = snapshot.nodes.slice(i, i + batchSize);
-      const nodeSession = this.driver.session();
-      try {
-        for (const node of batch) {
-          const labels = node.labels.join(':');
-          const query = `CREATE (n:${labels}) SET n = $properties`;
-          await nodeSession.run(query, { properties: node.properties });
+      
+      await this.transactionManager.executeInWriteTransaction(
+        async (tx: ManagedTransaction) => {
+          for (const node of batch) {
+            const labels = node.labels.join(':');
+            const query = `CREATE (n:${labels}) SET n = $properties`;
+            await tx.run(query, { properties: node.properties });
+          }
+          return true;
         }
-      } finally {
-        await nodeSession.close();
-      }
+      );
     }
 
     // Create relationships using property matching (simpler and more reliable)
     for (const rel of snapshot.relationships) {
-      const relSession = this.driver.session();
-      try {
-        const startNodeProps = snapshot.nodes.find(n => n.id === rel.startNode)?.properties;
-        const endNodeProps = snapshot.nodes.find(n => n.id === rel.endNode)?.properties;
-        
-        if (startNodeProps && endNodeProps) {
-          const query = `
-            MATCH (start), (end)
-            WHERE start = $startProps AND end = $endProps
-            CREATE (start)-[r:${rel.type}]->(end)
-            SET r = $properties
-          `;
-          await relSession.run(query, {
-            startProps: startNodeProps,
-            endProps: endNodeProps,
-            properties: rel.properties
-          });
-        }
-      } finally {
-        await relSession.close();
+      const startNodeProps = snapshot.nodes.find(n => n.id === rel.startNode)?.properties;
+      const endNodeProps = snapshot.nodes.find(n => n.id === rel.endNode)?.properties;
+      
+      if (startNodeProps && endNodeProps) {
+        await this.transactionManager.executeInWriteTransaction(
+          async (tx: ManagedTransaction) => {
+            const query = `
+              MATCH (start), (end)
+              WHERE start = $startProps AND end = $endProps
+              CREATE (start)-[r:${rel.type}]->(end)
+              SET r = $properties
+            `;
+            await tx.run(query, {
+              startProps: startNodeProps,
+              endProps: endNodeProps,
+              properties: rel.properties
+            });
+            return true;
+          }
+        );
       }
     }
   }

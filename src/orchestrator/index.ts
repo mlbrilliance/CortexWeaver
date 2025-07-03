@@ -208,12 +208,18 @@ export class Orchestrator {
       console.log(`Project ${this.parsedPlan.title} initialized successfully`);
       
     } catch (error) {
-      this.statusManager.setStatus('error');
+      if (this.statusManager) {
+        this.statusManager.setStatus('error');
+      }
       throw new Error(`Failed to initialize orchestrator: ${(error as Error).message}`);
     }
   }
 
   async start(): Promise<void> {
+    if (!this.statusManager) {
+      throw new Error('Orchestrator must be initialized before starting');
+    }
+    
     const projectId = this.statusManager.getProjectId();
     if (!projectId || !this.parsedPlan) {
       throw new Error('Project must be initialized before starting');

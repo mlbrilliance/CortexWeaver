@@ -31,6 +31,54 @@ export abstract class Agent {
   protected sessionMgr: AgentSessionManager | null = null;
 
   /**
+   * Check if storage is available for persistence operations
+   */
+  protected isStorageAvailable(): boolean {
+    return this.cognitiveCanvas !== null;
+  }
+
+  /**
+   * Check if agent is in offline mode
+   */
+  protected isOfflineMode(): boolean {
+    return !this.isStorageAvailable();
+  }
+
+  /**
+   * Request storage connection if in offline mode
+   */
+  protected async requestStorageConnection(): Promise<boolean> {
+    if (this.isStorageAvailable()) {
+      return true;
+    }
+    
+    console.log('📡 Agent requesting storage connection for persistence...');
+    // This could trigger a workflow to help user configure MCP servers
+    return false;
+  }
+
+  /**
+   * Execute operation with storage fallback
+   */
+  protected async executeWithStorageFallback<T>(
+    operation: () => Promise<T>,
+    fallback: () => Promise<T>,
+    operationName: string = 'operation'
+  ): Promise<T> {
+    if (this.isStorageAvailable()) {
+      try {
+        return await operation();
+      } catch (error) {
+        console.warn(`⚠️ Storage ${operationName} failed, using fallback:`, (error as Error).message);
+        return await fallback();
+      }
+    } else {
+      console.log(`📝 Executing ${operationName} in offline mode`);
+      return await fallback();
+    }
+  }
+
+  /**
    * Initialize the agent with configuration
    */
   async initialize(config: AgentConfig): Promise<void> {
@@ -49,8 +97,16 @@ export abstract class Agent {
     // Initialize workspace manager
     this.workspace = new WorkspaceManager(config.workspaceRoot);
 
-    // Initialize cognitive canvas
-    this.cognitiveCanvas = new CognitiveCanvas(config.cognitiveCanvasConfig);
+    // Initialize cognitive canvas - use shared instance if provided
+    if (config.cognitiveCanvas) {
+      this.cognitiveCanvas = config.cognitiveCanvas;
+    } else if (config.cognitiveCanvasConfig) {
+      this.cognitiveCanvas = new CognitiveCanvas(config.cognitiveCanvasConfig);
+    } else {
+      // Allow agents to work without cognitive canvas for offline mode
+      console.log('⚠️ Agent initialized without cognitive canvas - offline mode enabled');
+      this.cognitiveCanvas = null;
+    }
 
     // Initialize session manager
     this.sessionManager = new SessionManager();
@@ -458,8 +514,9 @@ export abstract class Agent {
       throw new Error('Workspace root is required');
     }
 
-    if (!config.cognitiveCanvasConfig?.uri) {
-      throw new Error('Cognitive Canvas configuration is required');
-    }
+    // Cognitive Canvas is optional - allow offline mode
+    // if (!config.cognitiveCanvasConfig?.uri) {
+    //   throw new Error('Cognitive Canvas configuration is required');
+    // }
   }
 }

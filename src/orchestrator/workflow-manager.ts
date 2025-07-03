@@ -113,15 +113,69 @@ export class WorkflowManager {
    */
   async initializeTaskWorkflowStates(tasks: TaskData[]): Promise<void> {
     for (const task of tasks) {
-      const feature = this.taskFeatureMap.get(task.id);
-      if (feature) {
+      try {
+        let feature = this.taskFeatureMap.get(task.id);
+        
+        // If no feature mapping exists, create a default one based on task
+        if (!feature) {
+          feature = this.createDefaultFeatureFromTask(task);
+          this.taskFeatureMap.set(task.id, feature);
+        }
+        
         const initialStep = this.determineInitialWorkflowStep(feature.agent);
         this.taskWorkflowState.set(task.id, {
           currentStep: initialStep,
           completedSteps: []
         });
+        
+        console.log(`Initialized workflow state for task ${task.id}: ${initialStep}`);
+      } catch (error) {
+        console.error(`Failed to initialize workflow state for task ${task.id}:`, error);
+        // Set default state on error
+        this.taskWorkflowState.set(task.id, {
+          currentStep: 'DEFINE_REQUIREMENTS',
+          completedSteps: []
+        });
       }
     }
+  }
+
+  /**
+   * Create a default feature from task data when no explicit mapping exists
+   */
+  private createDefaultFeatureFromTask(task: TaskData): Feature {
+    // Determine agent type based on task title/description
+    let agentType: AgentType = 'Coder'; // Default fallback
+    
+    const title = task.title.toLowerCase();
+    const description = task.description?.toLowerCase() || '';
+    
+    if (title.includes('test') || description.includes('test')) {
+      agentType = 'Tester';
+    } else if (title.includes('design') || title.includes('architecture') || description.includes('architecture')) {
+      agentType = 'Architect';
+    } else if (title.includes('spec') || title.includes('requirement') || description.includes('specification')) {
+      agentType = 'SpecWriter';
+    } else if (title.includes('contract') || title.includes('schema') || description.includes('contract')) {
+      agentType = 'Formalizer';
+    } else if (title.includes('prototype') || description.includes('prototype')) {
+      agentType = 'Prototyper';
+    }
+    
+    return {
+      name: task.title,
+      description: task.description || task.title,
+      priority: (task.priority as any) || 'Medium',
+      agent: agentType,
+      dependencies: [],
+      acceptanceCriteria: [`Complete ${task.title}`],
+      microtasks: [
+        `Analyze requirements for ${task.title}`,
+        `Implement core functionality`,
+        `Add comprehensive tests`,
+        `Document implementation`
+      ]
+    };
   }
 
   /**

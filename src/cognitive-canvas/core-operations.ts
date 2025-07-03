@@ -19,8 +19,8 @@ import { TransactionOptions, BatchOperation } from './transaction/types.js';
 export class CoreOperations {
   private transactionManager: TransactionManager;
 
-  constructor(private driver: Driver) {
-    this.transactionManager = new TransactionManager(driver);
+  constructor(private driver: Driver, sharedTransactionManager?: TransactionManager) {
+    this.transactionManager = sharedTransactionManager || new TransactionManager(driver);
   }
 
   private async executeQuery<T>(
@@ -408,6 +408,96 @@ export class CoreOperations {
   // Transaction Manager access for advanced operations
   getTransactionManager(): TransactionManager {
     return this.transactionManager;
+  }
+
+  // Project management operations
+  async getAllProjects(): Promise<ProjectData[]> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(
+          'MATCH (p:Project) RETURN p ORDER BY p.createdAt DESC'
+        );
+        return queryResult.records.map(record => record.get('p').properties);
+      }
+    );
+    return result.data;
+  }
+
+  async getProjectCount(): Promise<number> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run('MATCH (p:Project) RETURN count(p) as count');
+        return queryResult.records[0].get('count').toNumber();
+      }
+    );
+    return result.data;
+  }
+
+  async getTasksByProject(projectId: string): Promise<TaskData[]> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(
+          'MATCH (t:Task {projectId: $projectId}) RETURN t ORDER BY t.createdAt',
+          { projectId }
+        );
+        return queryResult.records.map(record => record.get('t').properties);
+      }
+    );
+    return result.data;
+  }
+
+  async getAgentsByProject(projectId: string): Promise<AgentData[]> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        const queryResult = await tx.run(
+          `MATCH (p:Project {id: $projectId})<-[:*]-(a:Agent) 
+           RETURN DISTINCT a ORDER BY a.createdAt`,
+          { projectId }
+        );
+        return queryResult.records.map(record => record.get('a').properties);
+      }
+    );
+    return result.data;
+  }
+
+  async getTasksWithStatus(status?: string): Promise<TaskData[]> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        let query = 'MATCH (t:Task)';
+        let params = {};
+        
+        if (status) {
+          query += ' WHERE t.status = $status';
+          params = { status };
+        }
+        
+        query += ' RETURN t ORDER BY t.createdAt DESC';
+        
+        const queryResult = await tx.run(query, params);
+        return queryResult.records.map(record => record.get('t').properties);
+      }
+    );
+    return result.data;
+  }
+
+  async getAgentsWithStatus(status?: string): Promise<AgentData[]> {
+    const result = await this.transactionManager.executeInReadTransaction(
+      async (tx: ManagedTransaction) => {
+        let query = 'MATCH (a:Agent)';
+        let params = {};
+        
+        if (status) {
+          query += ' WHERE a.status = $status';
+          params = { status };
+        }
+        
+        query += ' RETURN a ORDER BY a.createdAt DESC';
+        
+        const queryResult = await tx.run(query, params);
+        return queryResult.records.map(record => record.get('a').properties);
+      }
+    );
+    return result.data;
   }
 
   // Health check method

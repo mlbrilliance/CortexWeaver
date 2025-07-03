@@ -1,4 +1,5 @@
 import { Driver } from 'neo4j-driver';
+import { TransactionManager } from './transaction/transaction-manager.js';
 import { CritiqueAgentIntegration } from './agent-integration-critique';
 import { DebuggerAgentIntegration } from './agent-integration-debugger';
 import { KnowledgeUpdaterAgentIntegration } from './agent-integration-knowledge';
@@ -14,11 +15,11 @@ export class AgentIntegration {
   private knowledgeAgent: KnowledgeUpdaterAgentIntegration;
   private generalAgent: GeneralAgentIntegration;
 
-  constructor(private driver: Driver) {
-    this.critiqueAgent = new CritiqueAgentIntegration(driver);
-    this.debuggerAgent = new DebuggerAgentIntegration(driver);
-    this.knowledgeAgent = new KnowledgeUpdaterAgentIntegration(driver);
-    this.generalAgent = new GeneralAgentIntegration(driver);
+  constructor(private driver: Driver, sharedTransactionManager?: TransactionManager) {
+    this.critiqueAgent = new CritiqueAgentIntegration(driver, sharedTransactionManager);
+    this.debuggerAgent = new DebuggerAgentIntegration(driver, sharedTransactionManager);
+    this.knowledgeAgent = new KnowledgeUpdaterAgentIntegration(driver, sharedTransactionManager);
+    this.generalAgent = new GeneralAgentIntegration(driver, sharedTransactionManager);
   }
 
   // ========== Critique Agent Methods ==========

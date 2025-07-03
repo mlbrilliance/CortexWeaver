@@ -14,8 +14,8 @@ import { TransactionManager } from './transaction/transaction-manager.js';
 export class QueryEngine {
   private transactionManager: TransactionManager;
 
-  constructor(private driver: Driver) {
-    this.transactionManager = new TransactionManager(driver);
+  constructor(private driver: Driver, sharedTransactionManager?: TransactionManager) {
+    this.transactionManager = sharedTransactionManager || new TransactionManager(driver);
   }
 
   private async executeReadQuery<T>(

@@ -42,14 +42,14 @@ export class CLIValidators {
           
           const neo4jUri = process.env.NEO4J_URI || 'bolt://localhost:7687';
           const neo4jUsername = process.env.NEO4J_USERNAME || 'neo4j';
-          const neo4jPassword = configService.getRequiredEnvVar('NEO4J_PASSWORD');
+          const neo4jPassword = process.env.NEO4J_PASSWORD;
 
           const orchestratorConfig = {
-            neo4j: {
+            neo4j: neo4jPassword ? {
               uri: neo4jUri,
               username: neo4jUsername,
               password: neo4jPassword
-            },
+            } : undefined,
             claude: {
               apiKey: configService.getRequiredEnvVar('CLAUDE_API_KEY'),
               defaultModel: projectConfig.models.claude as any,
@@ -214,23 +214,67 @@ ${contractsStatus}
       throw new Error('No valid Claude credentials found');
     }
 
-    // 4. Validate required environment variables
+    // 4. Validate environment variables (Neo4j now optional)
+    let neo4jConfig: any = undefined;
     try {
       const neo4jUri = process.env.NEO4J_URI || 'bolt://localhost:7687';
       const neo4jUsername = process.env.NEO4J_USERNAME || 'neo4j';
-      const neo4jPassword = configService.getRequiredEnvVar('NEO4J_PASSWORD');
-
-      // 5. Create Orchestrator configuration
-      const orchestratorConfig: OrchestratorConfig = {
-        neo4j: {
+      const neo4jPassword = process.env.NEO4J_PASSWORD;
+      
+      // Only create Neo4j config if password is provided
+      if (neo4jPassword) {
+        neo4jConfig = {
           uri: neo4jUri,
           username: neo4jUsername,
           password: neo4jPassword
+        };
+        console.log('🔌 Neo4j configuration found, will use MCP-based Neo4j storage');
+      } else {
+        console.log('📝 No Neo4j password found, will use in-memory storage for offline development');
+      }
+    } catch (error) {
+      console.warn('⚠️ Neo4j configuration warning:', (error as Error).message);
+      console.log('📝 Will use in-memory storage for offline development');
+    }
+
+    try {
+      // 5. Create Orchestrator configuration
+      const orchestratorConfig: OrchestratorConfig = {
+        neo4j: neo4jConfig,  // Now optional
+        storage: {
+          type: neo4jConfig ? 'mcp-neo4j' : 'in-memory',
+          config: neo4jConfig
         },
         claude: {
           ...claudeConfig,
           defaultModel: projectConfig.models.claude as any,
           budgetLimit: projectConfig.budget.maxCost
+        },
+        auth: {
+          claudeMethod: authStatus.claudeAuth.method as any,
+          geminiMethod: authStatus.geminiAuth.method as any,
+          githubToken: process.env.GITHUB_TOKEN,
+          credentials: {
+            claude: claudeCredentials || undefined,
+            gemini: await authManager.getGeminiCredentials() || undefined
+          }
+        },
+        mcp: {
+          enabled: true,
+          servers: {
+            github: {
+              enabled: !!process.env.GITHUB_TOKEN,
+              token: process.env.GITHUB_TOKEN
+            },
+            filesystem: {
+              enabled: true,
+              allowedPaths: [projectRoot]
+            },
+            web: {
+              enabled: true,
+              allowedDomains: []
+            }
+          }
         }
       };
 
@@ -288,7 +332,7 @@ ${contractsStatus}
       }
 
     } catch (error) {
-      if ((error as Error).message.includes('Required environment variable')) {
+      if ((error as Error).message.includes('Claude configuration is required')) {
         throw new Error(`Missing required configuration: ${(error as Error).message}`);
       }
       throw error;

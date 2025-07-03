@@ -161,16 +161,25 @@ ${sessionOutput}
       const envVars = configService.loadEnvironmentVariables();
       Object.assign(process.env, envVars);
 
-      // Initialize Cognitive Canvas connection
-      const neo4jUri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-      const neo4jUsername = process.env.NEO4J_USERNAME || 'neo4j';
-      const neo4jPassword = configService.getRequiredEnvVar('NEO4J_PASSWORD');
-
-      const orchestratorConfig = {
-        neo4j: {
+      // Initialize storage configuration (Neo4j now optional)
+      let neo4jConfig: any = undefined;
+      const neo4jPassword = process.env.NEO4J_PASSWORD;
+      
+      if (neo4jPassword) {
+        const neo4jUri = process.env.NEO4J_URI || 'bolt://localhost:7687';
+        const neo4jUsername = process.env.NEO4J_USERNAME || 'neo4j';
+        neo4jConfig = {
           uri: neo4jUri,
           username: neo4jUsername,
           password: neo4jPassword
+        };
+      }
+
+      const orchestratorConfig = {
+        neo4j: neo4jConfig,
+        storage: {
+          type: neo4jConfig ? 'mcp-neo4j' as const : 'in-memory' as const,
+          config: neo4jConfig
         },
         claude: {
           apiKey: configService.getRequiredEnvVar('CLAUDE_API_KEY'),
