@@ -461,7 +461,7 @@ Scanning calculator implementation for potential issues...
 ✅ Ready for production`
     };
 
-    const content = mockResponses[agentRole] || `Agent ${agentRole} completed task successfully.`;
+    const content = (mockResponses as any)[agentRole] || `Agent ${agentRole} completed task successfully.`;
 
     return {
       content: [{ text: content }],
