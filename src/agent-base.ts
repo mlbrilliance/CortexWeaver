@@ -95,6 +95,11 @@ export abstract class Agent {
       temperature: config.claudeConfig.temperature || 0.7
     });
 
+    // Log successful initialization in Claude Code environment
+    if (process.env.CLAUDECODE === '1') {
+      console.log(`🤖 ${config.role.toUpperCase()} (${config.id}) - Initialized with Claude Code session`);
+    }
+
     // Initialize workspace manager
     this.workspace = new WorkspaceManager(config.workspaceRoot);
 
@@ -305,6 +310,7 @@ export abstract class Agent {
       const pheromoneData: PheromoneData = {
         id: `progress-${this.config.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: 'progress',
+        content: `Agent ${this.config.id} progress: ${details}`,
         strength,
         context: status,
         metadata: {

@@ -137,6 +137,7 @@ export class AgentErrorHandler {
         const errorPheromone: PheromoneData = {
           id: `error-${this.config.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           type: 'error',
+          content: `Agent ${this.config.id} encountered ${cortexError.severity} error: ${cortexError.message}`,
           strength: errorStrength,
           context: 'agent_error',
           metadata: {

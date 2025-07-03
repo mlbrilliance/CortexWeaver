@@ -49,6 +49,7 @@ export interface AgentData {
 export interface PheromoneData {
   id: string;
   type: string;
+  content?: string;
   strength: number;
   context: string;
   metadata: Record<string, any>;

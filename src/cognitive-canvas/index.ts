@@ -248,11 +248,16 @@ export class CognitiveCanvas {
         return (result.data as any)?.records?.map((r: any) => r.get('a').properties) || result.data || [];
       },
       createPheromone: async (pheromoneData: any) => {
+        // Provide default content if not specified
+        const dataWithContent = {
+          ...pheromoneData,
+          content: pheromoneData.content || `${pheromoneData.type} pheromone: ${pheromoneData.context}`
+        };
         const result = await storageManager.executeQuery(
           `CREATE (ph:Pheromone {id: $id, type: $type, content: $content, strength: $strength, createdAt: $createdAt}) RETURN ph`,
-          pheromoneData
+          dataWithContent
         );
-        return { id: pheromoneData.id, ...pheromoneData };
+        return { id: dataWithContent.id, ...dataWithContent };
       }
     };
   }

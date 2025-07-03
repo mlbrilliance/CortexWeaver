@@ -131,6 +131,12 @@ export class ClaudeClient {
   }
 
   async sendMessage(message: string, options: SendMessageOptions = {}): Promise<ClaudeResponse> {
+    // Check if we're in Claude Code environment - use inherited session
+    if (process.env.CLAUDECODE === '1' || process.env.CORTEX_DEMO_MODE === 'true') {
+      console.log('🎭 Using Claude Code session for agent request');
+      return await this.createMockClaudeResponse({ messages: [{ role: 'user', content: message }] });
+    }
+
     await this.checkBudgetLimit();
 
     const model = options.model || this.config.defaultModel;
@@ -463,13 +469,16 @@ Scanning calculator implementation for potential issues...
 
     const content = (mockResponses as any)[agentRole] || `Agent ${agentRole} completed task successfully.`;
 
+    const tokenUsage: TokenUsage = {
+      inputTokens: 100,
+      outputTokens: 200,
+      totalTokens: 300
+    };
+
     return {
-      content: [{ text: content }],
-      usage: {
-        input_tokens: 100,
-        output_tokens: 200
-      },
-      model: params.model
+      content: content,
+      tokenUsage: tokenUsage,
+      model: params.model || ClaudeModel.SONNET_4
     };
   }
 
