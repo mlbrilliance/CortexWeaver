@@ -217,6 +217,12 @@ export abstract class Agent {
     }
 
     try {
+      const agentId = this.config?.id || 'unknown';
+      const role = this.config?.role || 'agent';
+      
+      console.log(`🤖 ${role.toUpperCase()} (${agentId}) - Processing task...`);
+      console.log(`📝 Input: ${message.substring(0, 100)}${message.length > 100 ? '...' : ''}`);
+
       const defaultOptions: SendMessageOptions = {
         model: this.config!.claudeConfig.defaultModel || ClaudeModel.SONNET_4,
         maxTokens: this.config!.claudeConfig.maxTokens || 4096,
@@ -227,6 +233,11 @@ export abstract class Agent {
 
       const response = await this.claudeClient.sendMessage(message, defaultOptions);
       
+      console.log(`✅ ${role.toUpperCase()} (${agentId}) - Task completed!`);
+      console.log(`📤 Output: ${response.content.substring(0, 150)}${response.content.length > 150 ? '...' : ''}`);
+      console.log(`📊 Tokens: ${response.tokenUsage.totalTokens} (${response.tokenUsage.inputTokens} in, ${response.tokenUsage.outputTokens} out)`);
+      console.log('─'.repeat(80));
+      
       // Update conversation history
       this.conversationHistory.push(
         { role: 'user', content: message },
@@ -235,6 +246,7 @@ export abstract class Agent {
 
       return response;
     } catch (error) {
+      console.log(`❌ ${this.config?.role?.toUpperCase() || 'AGENT'} (${this.config?.id}) - Error: ${(error as Error).message}`);
       throw new Error(`Claude API error: ${(error as Error).message}`);
     }
   }
