@@ -14,26 +14,29 @@ export class PersonaTemplates {
       fs.mkdirSync(promptsPath, { recursive: true });
     }
 
-    // Create agent persona files
+    // Create agent persona files - all 21 agents from source
     const personaFiles = [
-      'orchestrator.md',
-      'governor.md',
-      'reflector.md',
-      'formalizer.md',
       'architect.md',
-      'coder.md',
-      'quality-gatekeeper.md',
-      'london-tester.md',
       'chicago-tester.md',
-      'property-tester.md',
-      'mutation-tester.md',
-      'spec-writer.md',
-      'guide.md',
-      'test-result-documenter.md',
-      'monitor.md',
-      'performance-optimizer.md',
+      'coder.md',
       'cognitive-canvas-navigator.md',
-      'code-savant.md'
+      'critique.md',
+      'debugger.md',
+      'formalizer.md',
+      'governor.md',
+      'guide.md',
+      'knowledge-updater.md',
+      'london-tester.md',
+      'monitor.md',
+      'mutation-tester.md',
+      'performance-optimizer.md',
+      'property-tester.md',
+      'prototyper.md',
+      'prototyper-simple.md',
+      'quality-gatekeeper.md',
+      'reflector.md',
+      'spec-writer.md',
+      'test-result-documenter.md'
     ];
 
     // Copy persona files from the source prompts directory
