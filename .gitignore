@@ -872,6 +872,13 @@ GTAGS
 # Special CortexWeaver V4.0 Patterns
 # =====================================
 
+# Test projects and development artifacts
+cortexweaver-test/test-project/
+cortexweaver-test/test-project-*/
+**/test-project/
+test-integration/
+demo-projects/
+
 # Agent execution artifacts
 **/agent-execution-*.log
 **/prototype-generation-*.md
@@ -897,5 +904,12 @@ deployment-logs/
 # Documentation generation
 docs-temp/
 api-docs-generated/
+
+# Live orchestration demos and tests
+live-orchestration-monitor.js
+real-cortex-test.js
+real-orchestration-test.js
+verify-claude-session.js
+demo-orchestration.js
 
 # END OF CORTEXWEAVER 4.0 .GITIGNORE
