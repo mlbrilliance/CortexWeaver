@@ -104,10 +104,13 @@ export class AgentSpawner {
         // Generate agent prompt
         const prompt = this.promptGenerator.generateAgentPrompt(task, agentType, context);
         
-        // Start agent in session with required flags
+        // Determine agent command based on configuration or type
+        const agentCommand = this.getAgentCommand(agentType, context);
+        
+        // Start agent in session with appropriate command
         await this.sessionManager.startAgentInSession(
           session.sessionId,
-          'claude-code',
+          agentCommand,
           prompt
         );
         
@@ -314,9 +317,10 @@ export class AgentSpawner {
         const prompt = this.promptGenerator.generateCritiquePrompt(taskId, errorContext);
         
         // Start Critique with analysis focus
+        const agentCommand = this.getAgentCommand('Critique', {});
         await this.sessionManager.startAgentInSession(
           session.sessionId,
-          'claude-code',
+          agentCommand,
           prompt
         );
         
@@ -562,5 +566,34 @@ export class AgentSpawner {
       pendingMessages,
       communicationChannels: this.communicationQueues.size
     };
+  }
+
+  /**
+   * Determine the appropriate agent command based on agent type and context
+   */
+  private getAgentCommand(agentType: string, context: any): string {
+    // Check for Gemini-powered agents as defined in CLAUDE.md
+    const geminiAgentTypes = [
+      'Guide', 'SpecWriter', 'TestResultDocumenter', 'Monitor', 'CodeSavant'
+    ];
+    
+    // Check if this is explicitly configured as a Gemini agent
+    if (geminiAgentTypes.includes(agentType)) {
+      return 'gemini';
+    }
+    
+    // Check context for Gemini configuration
+    if (context?.agentProvider === 'gemini' || context?.useGemini) {
+      return 'gemini';
+    }
+    
+    // Check global configuration for Gemini preference
+    // This could be expanded to read from orchestrator config
+    if (process.env.CORTEX_DEFAULT_AGENT_PROVIDER === 'gemini') {
+      return 'gemini';
+    }
+    
+    // Default to Claude Code
+    return 'claude-code';
   }
 }

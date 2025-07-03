@@ -30,7 +30,8 @@ export type AgentType =
   | 'KnowledgeUpdater'
   | 'PerformanceOptimizer'
   | 'QualityGatekeeper'
-  | 'TestResultDocumenter';
+  | 'TestResultDocumenter'
+  | 'CodeSavant';
 
 export interface WorkflowStepConfig {
   step: WorkflowStep;
@@ -293,7 +294,8 @@ export class WorkflowManager {
       'KnowledgeUpdater': 'DEFINE_REQUIREMENTS',
       'PerformanceOptimizer': 'IMPLEMENT_CODE',
       'QualityGatekeeper': 'EXECUTE_TESTS',
-      'TestResultDocumenter': 'EXECUTE_TESTS'
+      'TestResultDocumenter': 'EXECUTE_TESTS',
+      'CodeSavant': 'IMPLEMENT_CODE'
     };
 
     return agentStepMap[agentType] || 'DEFINE_REQUIREMENTS';

@@ -268,7 +268,17 @@ export class SessionManager {
       }
       
       // Start the agent with the prompt, ensuring proper command execution
-      const fullCommand = `${agentCommand} -p --dangerously-skip-permissions < ${promptFile}`;
+      let fullCommand: string;
+      
+      // Check if this is a Gemini agent based on the command
+      if (agentCommand.includes('gemini') || agentCommand === 'gemini') {
+        // For Gemini CLI, use different command format
+        fullCommand = `${agentCommand} -p < ${promptFile}`;
+      } else {
+        // For Claude Code agents
+        fullCommand = `${agentCommand} -p --dangerously-skip-permissions < ${promptFile}`;
+      }
+      
       await execAsync(`tmux send-keys -t ${sessionId} '${fullCommand}' Enter`);
       
       console.log(`Started agent in session ${sessionId} with command: ${agentCommand}`);

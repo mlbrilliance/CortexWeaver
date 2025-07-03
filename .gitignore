@@ -911,5 +911,7 @@ real-cortex-test.js
 real-orchestration-test.js
 verify-claude-session.js
 demo-orchestration.js
+test-gemini-integration.js
+test-live-gemini-orchestration.js
 
 # END OF CORTEXWEAVER 4.0 .GITIGNORE
