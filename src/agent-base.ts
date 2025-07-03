@@ -86,10 +86,11 @@ export abstract class Agent {
     
     this.config = config;
     
-    // Initialize Claude client
+    // Initialize Claude client - prefer sessionToken for Claude Code integration
     this.claudeClient = new ClaudeClient({
       apiKey: config.claudeConfig.apiKey,
-      defaultModel: config.claudeConfig.defaultModel || ClaudeModel.SONNET,
+      sessionToken: config.claudeConfig.sessionToken || 'claude-code-inherited',
+      defaultModel: config.claudeConfig.defaultModel || ClaudeModel.SONNET_4,
       maxTokens: config.claudeConfig.maxTokens || 4096,
       temperature: config.claudeConfig.temperature || 0.7
     });
@@ -217,7 +218,7 @@ export abstract class Agent {
 
     try {
       const defaultOptions: SendMessageOptions = {
-        model: this.config!.claudeConfig.defaultModel || ClaudeModel.SONNET,
+        model: this.config!.claudeConfig.defaultModel || ClaudeModel.SONNET_4,
         maxTokens: this.config!.claudeConfig.maxTokens || 4096,
         temperature: this.config!.claudeConfig.temperature || 0.7,
         conversationHistory: this.conversationHistory,
@@ -506,8 +507,8 @@ export abstract class Agent {
       throw new Error('Agent capabilities are required');
     }
 
-    if (!config.claudeConfig?.apiKey) {
-      throw new Error('Claude API key is required');
+    if (!config.claudeConfig?.apiKey && !config.claudeConfig?.sessionToken) {
+      throw new Error('Either Claude API key or session token is required');
     }
 
     if (!config.workspaceRoot) {

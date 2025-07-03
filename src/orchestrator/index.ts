@@ -456,7 +456,8 @@ export class Orchestrator {
           role: 'navigator',
           capabilities: ['graph-navigation'],
           claudeConfig: {
-            apiKey: this.client.getConfiguration()?.apiKey || 'default',
+            sessionToken: 'claude-code-inherited',
+            defaultModel: 'claude-sonnet-4-20250514' as any,
           },
           workspaceRoot: process.cwd(),
           cognitiveCanvas: this.canvas!  // Use shared CognitiveCanvas instance

@@ -6,7 +6,8 @@ export interface AgentConfig {
   role: string;
   capabilities: string[];
   claudeConfig: {
-    apiKey: string;
+    apiKey?: string;
+    sessionToken?: string;
     defaultModel?: ClaudeModel;
     maxTokens?: number;
     temperature?: number;
