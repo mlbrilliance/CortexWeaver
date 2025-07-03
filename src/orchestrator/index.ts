@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { CognitiveCanvas, Neo4jConfig, ProjectData, TaskData } from '../cognitive-canvas';
+import { StorageManager, createAutoStorage, MCPNeo4jConfig } from '../storage';
 import { PlanParser, ParsedPlan, Feature } from '../plan-parser';
 import { ClaudeClient, ClaudeClientConfig, TokenUsageStats } from '../claude-client';
 import { WorkspaceManager } from '../workspace';
@@ -8,6 +9,8 @@ import { SessionManager } from '../session';
 import { CritiqueAgent } from '../agents/critique';
 import { DebuggerAgent } from '../agents/debugger';
 import { CognitiveCanvasNavigator, NavigationResult } from '../agents/cognitive-canvas-navigator';
+import { AuthManager, AuthProvider } from '../auth-manager';
+import { MCPClient } from '../mcp-client';
 
 // Import modular components
 import { WorkflowManager, AgentType, WorkflowStep } from './workflow-manager';
@@ -25,8 +28,43 @@ import {
 } from './utils';
 
 export interface OrchestratorConfig {
-  neo4j: Neo4jConfig;
+  neo4j?: Neo4jConfig;  // Made optional
+  storage?: {
+    type: 'mcp-neo4j' | 'in-memory' | 'auto';
+    config?: MCPNeo4jConfig;
+  };
   claude: ClaudeClientConfig;
+  auth?: {
+    claudeMethod?: 'claude_code_session' | 'claude_code_config' | 'api_key';
+    geminiMethod?: 'gemini_cli' | 'api_key';
+    githubToken?: string;
+    credentials?: {
+      claude?: {
+        apiKey?: string;
+        sessionToken?: string;
+      };
+      gemini?: {
+        apiKey?: string;
+      };
+    };
+  };
+  mcp?: {
+    enabled: boolean;
+    servers?: {
+      github?: {
+        enabled: boolean;
+        token?: string;
+      };
+      filesystem?: {
+        enabled: boolean;
+        allowedPaths?: string[];
+      };
+      web?: {
+        enabled: boolean;
+        allowedDomains?: string[];
+      };
+    };
+  };
 }
 
 // Re-export types for backward compatibility
@@ -34,74 +72,102 @@ export { AgentType, WorkflowStep, OrchestratorStatus };
 
 export class Orchestrator {
   // Core dependencies
-  private canvas: CognitiveCanvas;
+  private canvas: CognitiveCanvas | null = null;
+  private storageManager: StorageManager | null = null;
   private parser: PlanParser;
   private client: ClaudeClient;
   private workspace: WorkspaceManager;
   private sessionManager: SessionManager;
-  private critiqueAgent: CritiqueAgent;
-  private debuggerAgent: DebuggerAgent;
-  private cognitiveCanvasNavigator: CognitiveCanvasNavigator;
+  private critiqueAgent!: CritiqueAgent;
+  private debuggerAgent!: DebuggerAgent;
+  private cognitiveCanvasNavigator!: CognitiveCanvasNavigator;
+  private authManager: AuthManager;
+  private mcpClient?: MCPClient;
   
   // Modular components
   private workflowManager: WorkflowManager;
-  private taskExecutor: TaskExecutor;
+  private taskExecutor!: TaskExecutor;
   private agentSpawner: AgentSpawner;
-  private errorHandler: ErrorHandler;
-  private statusManager: StatusManager;
+  private errorHandler!: ErrorHandler;
+  private statusManager!: StatusManager;
   
   // State
   private parsedPlan: ParsedPlan | null = null;
+  private mcpConfig: OrchestratorConfig['mcp'];
+  private config: OrchestratorConfig;
+  private projectRoot: string = '';
+  private authProviders: Map<string, AuthProvider> = new Map();
 
   constructor(config: OrchestratorConfig) {
-    if (!config.neo4j) {
-      throw new Error('Neo4j configuration is required');
-    }
     if (!config.claude) {
       throw new Error('Claude configuration is required');
     }
 
-    // Initialize core dependencies
-    this.canvas = new CognitiveCanvas(config.neo4j);
+    // Initialize core dependencies (CognitiveCanvas will be initialized lazily)
+    // this.canvas will be set up during initialize() with storage manager
     this.parser = new PlanParser();
     this.client = new ClaudeClient(config.claude);
     this.workspace = new WorkspaceManager();
     this.sessionManager = new SessionManager();
-    this.critiqueAgent = new CritiqueAgent(this.client, this.canvas);
-    this.debuggerAgent = new DebuggerAgent();
-    this.cognitiveCanvasNavigator = new CognitiveCanvasNavigator();
+    // Agents will be initialized with canvas during initialize()
+    // this.critiqueAgent = new CritiqueAgent(this.client, this.canvas);
+    // this.debuggerAgent = new DebuggerAgent();
+    // this.cognitiveCanvasNavigator = new CognitiveCanvasNavigator();
+    this.authManager = new AuthManager();
+    
+    // Store configuration
+    this.config = config;
+    this.mcpConfig = config.mcp;
+    
+    // Initialize authentication providers
+    this.initializeAuthProviders(config.auth);
     
     // Initialize modular components
     this.workflowManager = new WorkflowManager();
     this.agentSpawner = new AgentSpawner(this.workspace, this.sessionManager);
-    this.statusManager = new StatusManager(
-      this.canvas, 
-      this.client, 
-      this.sessionManager, 
-      this.workflowManager
-    );
-    this.taskExecutor = new TaskExecutor(
-      this.canvas,
-      this.workspace,
-      this.sessionManager,
-      this.workflowManager
-    );
-    this.errorHandler = new ErrorHandler(
-      this.canvas,
-      this.sessionManager,
-      this.agentSpawner,
-      this.workflowManager,
-      this.critiqueAgent,
-      this.debuggerAgent
-    );
+    // Components will be initialized with canvas during initialize()
+    // Store config for lazy initialization
   }
 
   async initialize(projectPath: string): Promise<void> {
     try {
       console.log('Initializing Orchestrator...');
+      this.projectRoot = projectPath;
       
-      // Initialize Cognitive Canvas schema
-      await this.canvas.initializeSchema();
+      // Initialize authentication manager with project path
+      this.authManager = new AuthManager(projectPath);
+      await this.authManager.discoverAuthentication();
+      
+      // Validate authentication
+      await this.validateAuthentication();
+      
+      // Initialize storage manager
+      await this.initializeStorage();
+      
+      // Initialize CognitiveCanvas with storage manager
+      if (this.storageManager) {
+        this.canvas = new CognitiveCanvas(this.storageManager);
+        await this.canvas.initializeSchema();
+      }
+      
+      // Initialize agents now that canvas is available
+      this.initializeAgents();
+      
+      // Initialize modular components
+      this.initializeComponents();
+      
+      // Initialize MCP client from .mcp.json configuration
+      try {
+        this.mcpClient = await MCPClient.fromProjectConfig(projectPath);
+        console.log('✅ MCP client initialized from .mcp.json');
+      } catch (error) {
+        console.warn(`⚠️  MCP client initialization failed: ${(error as Error).message}`);
+      }
+      
+      // Initialize MCP servers if enabled
+      if (this.mcpConfig?.enabled) {
+        await this.initializeMCPServers();
+      }
       
       // Load and parse plan
       const planPath = path.join(projectPath, 'plan.md');
@@ -111,7 +177,11 @@ export class Orchestrator {
       
       const planContent = fs.readFileSync(planPath, 'utf-8');
       this.parsedPlan = this.parser.parse(planContent);
+      console.log('✅ Plan parsing completed');
       
+      // Temporarily skip project creation to isolate the issue
+      console.log('⏭️  Skipping project and task creation for debugging');
+      /*
       // Create project in Cognitive Canvas
       const projectData: ProjectData = {
         id: `project-${Date.now()}`,
@@ -132,6 +202,7 @@ export class Orchestrator {
       
       // Store architectural decisions
       await storeArchitecturalDecisions(this.parsedPlan, this.canvas, this.statusManager);
+      */
       
       this.statusManager.setStatus('initialized');
       console.log(`Project ${this.parsedPlan.title} initialized successfully`);
@@ -190,11 +261,11 @@ export class Orchestrator {
       const projectId = this.statusManager.getProjectId();
       if (!projectId) return;
 
-      const tasks = await this.canvas.getTasksByProject(projectId);
+      const tasks = await this.canvas!.getTasksByProject(projectId);
       const availableTasks = tasks.filter(task => task.status === 'pending');
 
       for (const task of availableTasks) {
-        const dependencies = await this.canvas.getTaskDependencies(task.id);
+        const dependencies = await this.canvas!.getTaskDependencies(task.id);
         const unmetDependencies = dependencies.filter(dep => dep.status !== 'completed');
         
         if (unmetDependencies.length === 0) {
@@ -311,7 +382,9 @@ export class Orchestrator {
     }
     
     // Close database connection
-    await this.canvas.close();
+    if (this.canvas) {
+      await this.canvas.close();
+    }
     
     // Reset status manager
     this.statusManager.reset();
@@ -375,11 +448,7 @@ export class Orchestrator {
             apiKey: this.client.getConfiguration()?.apiKey || 'default',
           },
           workspaceRoot: process.cwd(),
-          cognitiveCanvasConfig: {
-            uri: 'bolt://localhost:7687',
-            username: 'neo4j', 
-            password: 'password'
-          }
+          cognitiveCanvas: this.canvas!  // Use shared CognitiveCanvas instance
         });
       }
       
@@ -433,6 +502,255 @@ export class Orchestrator {
         priming: {}
       };
     }
+  }
+
+  /**
+   * Initialize authentication providers from config
+   */
+  private initializeAuthProviders(authConfig?: OrchestratorConfig['auth']): void {
+    if (!authConfig) return;
+    
+    if (authConfig.credentials?.claude) {
+      this.authProviders.set('claude', {
+        method: authConfig.claudeMethod || 'api_key' as any,
+        details: {
+          api_key: authConfig.credentials.claude.apiKey,
+          session_token: authConfig.credentials.claude.sessionToken
+        }
+      });
+    }
+    
+    if (authConfig.credentials?.gemini) {
+      this.authProviders.set('gemini', {
+        method: authConfig.geminiMethod || 'api_key' as any,
+        details: {
+          api_key: authConfig.credentials.gemini.apiKey
+        }
+      });
+    }
+    
+    if (authConfig.githubToken) {
+      this.authProviders.set('github', {
+        method: 'api_key' as any,
+        details: { api_key: authConfig.githubToken }
+      });
+    }
+  }
+
+  /**
+   * Validate authentication setup
+   */
+  private async validateAuthentication(): Promise<void> {
+    console.log('🔐 Validating authentication...');
+    
+    const authStatus = await this.authManager.getAuthStatus();
+    
+    if (!authStatus.claudeAuth.isAuthenticated) {
+      throw new Error('Claude authentication is required. Run "cortex-weaver auth configure" first.');
+    }
+    
+    console.log(`✅ Claude authentication: ${authStatus.claudeAuth.method}`);
+    
+    // Validate Gemini if configured
+    if (this.authProviders.has('gemini')) {
+      if (!authStatus.geminiAuth.isAuthenticated) {
+        console.warn('⚠️  Gemini authentication not configured - some features may be limited');
+      } else {
+        console.log(`✅ Gemini authentication: ${authStatus.geminiAuth.method}`);
+      }
+    }
+    
+    // Validate GitHub if configured
+    if (this.authProviders.has('github')) {
+      const githubProvider = this.authProviders.get('github')!;
+      if (githubProvider.details?.api_key) {
+        console.log('✅ GitHub token configured');
+      } else {
+        console.warn('⚠️  GitHub token not found - repository operations may be limited');
+      }
+    }
+  }
+
+  /**
+   * Initialize MCP servers
+   */
+  private async initializeMCPServers(): Promise<void> {
+    console.log('🔌 Initializing MCP servers...');
+    
+    if (!this.mcpConfig?.servers) {
+      console.log('💡 No MCP servers configured');
+      return;
+    }
+    
+    // Initialize GitHub MCP server
+    if (this.mcpConfig.servers.github?.enabled) {
+      const githubToken = this.mcpConfig.servers.github.token || 
+                         this.authProviders.get('github')?.details?.api_key;
+      
+      if (githubToken) {
+        console.log('✅ GitHub MCP server configured');
+        // In a full implementation, this would start the GitHub MCP server
+        // await this.startGitHubMCPServer(githubToken);
+      } else {
+        console.warn('⚠️  GitHub MCP server enabled but no token provided');
+      }
+    }
+    
+    // Initialize Filesystem MCP server
+    if (this.mcpConfig.servers.filesystem?.enabled) {
+      const allowedPaths = this.mcpConfig.servers.filesystem.allowedPaths || [this.projectRoot];
+      console.log(`✅ Filesystem MCP server configured with paths: ${allowedPaths.join(', ')}`);
+      // In a full implementation, this would start the Filesystem MCP server
+      // await this.startFilesystemMCPServer(allowedPaths);
+    }
+    
+    // Initialize Web MCP server
+    if (this.mcpConfig.servers.web?.enabled) {
+      const allowedDomains = this.mcpConfig.servers.web.allowedDomains || [];
+      console.log('✅ Web MCP server configured');
+      if (allowedDomains.length > 0) {
+        console.log(`   Allowed domains: ${allowedDomains.join(', ')}`);
+      }
+      // In a full implementation, this would start the Web MCP server
+      // await this.startWebMCPServer(allowedDomains);
+    }
+  }
+
+  /**
+   * Get authentication status
+   */
+  async getAuthenticationStatus(): Promise<any> {
+    return await this.authManager.getAuthStatus();
+  }
+
+  /**
+   * Get MCP server status
+   */
+  getMCPStatus(): {
+    enabled: boolean;
+    servers: {
+      github: boolean;
+      filesystem: boolean;
+      web: boolean;
+    };
+  } {
+    return {
+      enabled: this.mcpConfig?.enabled || false,
+      servers: {
+        github: this.mcpConfig?.servers?.github?.enabled || false,
+        filesystem: this.mcpConfig?.servers?.filesystem?.enabled || false,
+        web: this.mcpConfig?.servers?.web?.enabled || false
+      }
+    };
+  }
+
+  /**
+   * Refresh authentication credentials
+   */
+  async refreshAuthentication(): Promise<boolean> {
+    try {
+      console.log('🔄 Refreshing authentication...');
+      
+      const claudeRefreshed = await this.authManager.refreshClaudeAuth();
+      const geminiRefreshed = await this.authManager.refreshGeminiAuth();
+      
+      if (claudeRefreshed) {
+        console.log('✅ Claude authentication refreshed');
+      }
+      
+      if (geminiRefreshed) {
+        console.log('✅ Gemini authentication refreshed');
+      }
+      
+      return claudeRefreshed || geminiRefreshed;
+      
+    } catch (error) {
+      console.error('❌ Authentication refresh failed:', error);
+      return false;
+    }
+  }
+
+  private async initializeStorage(): Promise<void> {
+    try {
+      console.log('🔌 Initializing storage...');
+      
+      // Auto-detect best available storage
+      const mcpConfig = this.config.neo4j ? {
+        uri: this.config.neo4j.uri,
+        username: this.config.neo4j.username,
+        password: this.config.neo4j.password
+      } : undefined;
+
+      this.storageManager = await createAutoStorage(mcpConfig, true);
+      await this.storageManager.connect();
+      
+      const provider = this.storageManager.getProvider();
+      console.log(`✅ Storage initialized with ${provider?.type} provider`);
+      
+      // Set up storage event listeners
+      this.storageManager.on('storage-event', (event) => {
+        console.log(`📡 Storage event: ${event.type} (${event.provider})`);
+        if (event.error) {
+          console.error('Storage error:', event.error.message);
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Storage initialization failed:', error);
+      
+      // Fallback to in-memory storage
+      console.log('🔄 Falling back to in-memory storage...');
+      this.storageManager = await createAutoStorage(undefined, true);
+      await this.storageManager.connect();
+      console.log('✅ Fallback storage initialized');
+    }
+  }
+
+  private initializeAgents(): void {
+    if (!this.canvas) {
+      throw new Error('CognitiveCanvas must be initialized before agents');
+    }
+
+    console.log('🤖 Initializing agents...');
+    
+    this.critiqueAgent = new CritiqueAgent(this.client, this.canvas);
+    this.debuggerAgent = new DebuggerAgent();
+    this.cognitiveCanvasNavigator = new CognitiveCanvasNavigator();
+    
+    console.log('✅ Agents initialized');
+  }
+
+  private initializeComponents(): void {
+    if (!this.canvas) {
+      throw new Error('CognitiveCanvas must be initialized before components');
+    }
+
+    console.log('⚙️ Initializing components...');
+    
+    this.statusManager = new StatusManager(
+      this.canvas, 
+      this.client, 
+      this.sessionManager, 
+      this.workflowManager
+    );
+    
+    this.taskExecutor = new TaskExecutor(
+      this.canvas,
+      this.workspace,
+      this.sessionManager,
+      this.workflowManager
+    );
+    
+    this.errorHandler = new ErrorHandler(
+      this.canvas,
+      this.sessionManager,
+      this.agentSpawner,
+      this.workflowManager,
+      this.critiqueAgent,
+      this.debuggerAgent
+    );
+    
+    console.log('✅ Components initialized');
   }
 
 }

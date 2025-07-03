@@ -1,4 +1,5 @@
 import { MCPClientOperations } from './client-operations';
+import { CLITemplates } from '../templates';
 
 export interface Neo4jQueryResult {
   records: any[];
@@ -50,6 +51,40 @@ export class MCPClient {
     // Initialize configuration with environment variables if not provided
     const finalConfig = this.initializeConfig(config);
     this.operations = new MCPClientOperations(finalConfig);
+  }
+
+  /**
+   * Create MCPClient from .mcp.json configuration file
+   */
+  static async fromProjectConfig(projectRoot: string): Promise<MCPClient> {
+    try {
+      const mcpConfig = await CLITemplates.getMCPConfig(projectRoot);
+      
+      // Extract MCP server configurations
+      const config: MCPClientConfig = {};
+      
+      if (mcpConfig.mcpServers && mcpConfig.mcpServers['neo4j-memory']) {
+        const neo4jServer = mcpConfig.mcpServers['neo4j-memory'];
+        config.neo4j = {
+          uri: neo4jServer.env?.NEO4J_URI || 'bolt://localhost:7687',
+          username: neo4jServer.env?.NEO4J_USERNAME || 'neo4j',
+          password: neo4jServer.env?.NEO4J_PASSWORD || 'cortexweaver',
+        };
+      }
+      
+      if (mcpConfig.mcpServers && mcpConfig.mcpServers['github']) {
+        const githubServer = mcpConfig.mcpServers['github'];
+        config.github = {
+          token: process.env.GITHUB_TOKEN || githubServer.env?.GITHUB_PERSONAL_ACCESS_TOKEN || '',
+        };
+      }
+      
+      return new MCPClient(config);
+    } catch (error) {
+      console.warn(`Warning: Could not load .mcp.json configuration: ${(error as Error).message}`);
+      console.warn('Falling back to environment variables and defaults.');
+      return new MCPClient();
+    }
   }
 
   /**

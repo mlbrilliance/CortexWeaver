@@ -1,6 +1,7 @@
 import { ProjectTemplates } from './project-templates';
 import { ConfigTemplates } from './config-templates';
 import { DockerTemplates } from './docker-templates';
+import { MCPTemplates } from './mcp-templates';
 
 /**
  * CLITemplates Module
@@ -84,6 +85,19 @@ export class CLITemplates {
     return DockerTemplates.createHelmChart(projectRoot);
   }
 
+  // MCP methods - delegate to MCPTemplates
+  static async createMCPConfig(projectRoot: string): Promise<void> {
+    return MCPTemplates.createMCPConfig(projectRoot);
+  }
+
+  static async validateMCPConfig(projectRoot: string): Promise<boolean> {
+    return MCPTemplates.validateMCPConfig(projectRoot);
+  }
+
+  static async getMCPConfig(projectRoot: string): Promise<any> {
+    return MCPTemplates.getMCPConfig(projectRoot);
+  }
+
   // Convenience methods for common operations
   static async createFullProjectStructure(projectRoot: string): Promise<void> {
     // Create all essential project files and directories
@@ -91,6 +105,7 @@ export class CLITemplates {
       this.createPlanTemplate(projectRoot),
       this.createEnvTemplate(projectRoot),
       this.createGitIgnoreTemplate(projectRoot),
+      this.createMCPConfig(projectRoot),
       this.createContractsDirectory(projectRoot),
       this.createPromptsDirectory(projectRoot),
       this.createPrototypesDirectory(projectRoot),
