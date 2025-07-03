@@ -179,10 +179,16 @@ export class Orchestrator {
       this.parsedPlan = this.parser.parse(planContent);
       console.log('✅ Plan parsing completed');
       
-      // Temporarily skip project creation to isolate the issue
-      console.log('⏭️  Skipping project and task creation for debugging');
-      /*
       // Create project in Cognitive Canvas
+      if (!this.canvas) {
+        throw new Error('CognitiveCanvas must be initialized before creating project');
+      }
+      
+      // Ensure statusManager is initialized before using it
+      if (!this.statusManager) {
+        throw new Error('StatusManager must be initialized before creating project');
+      }
+      
       const projectData: ProjectData = {
         id: `project-${Date.now()}`,
         name: this.parsedPlan.title,
@@ -202,7 +208,6 @@ export class Orchestrator {
       
       // Store architectural decisions
       await storeArchitecturalDecisions(this.parsedPlan, this.canvas, this.statusManager);
-      */
       
       this.statusManager.setStatus('initialized');
       console.log(`Project ${this.parsedPlan.title} initialized successfully`);
