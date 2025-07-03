@@ -27,7 +27,7 @@ export class MCPTemplates {
             "--env", "NEO4J_URI=bolt://localhost:7687",
             "--env", "NEO4J_USERNAME=neo4j",
             "--env", "NEO4J_PASSWORD=cortexweaver",
-            "mcpneo4j/memory:latest"
+            "mcp/memory:latest"
           ],
           "env": {
             "NEO4J_URI": "bolt://localhost:7687",
@@ -45,7 +45,7 @@ export class MCPTemplates {
             "--env", "GITHUB_TOOLSETS=context,repos,issues,pull_requests,actions,code_security",
             "--env", "GITHUB_READ_ONLY=1",
             "--env", "GITHUB_DYNAMIC_TOOLSETS=1",
-            "ghcr.io/github/github-mcp-server:latest"
+            "mcp/github:latest"
           ],
           "env": {
             "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}",

@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   mcp-neo4j-memory:
-    image: mcpneo4j/memory:latest
+    image: mcp/memory:latest
     container_name: cortexweaver-mcp-neo4j
     environment:
       NEO4J_URI: bolt://neo4j:7687
@@ -41,9 +41,11 @@ services:
     depends_on:
       - neo4j
     restart: unless-stopped
+    ports:
+      - "3001:3001"
 
   github-mcp-server:
-    image: ghcr.io/github/github-mcp-server:latest
+    image: mcp/github:latest
     container_name: cortexweaver-github-mcp
     environment:
       GITHUB_PERSONAL_ACCESS_TOKEN: \${GITHUB_TOKEN}
@@ -51,6 +53,8 @@ services:
       GITHUB_READ_ONLY: "1"
       GITHUB_DYNAMIC_TOOLSETS: "1"
     restart: unless-stopped
+    ports:
+      - "3002:3002"
 
 volumes:
   neo4j_data:
